@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict
@@ -6,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 
 from agent.approval import ApprovalRun
 from app.schemas import RunTaskRequest, ApprovalDecisionRequest
+from app.auth import require_roles
 from core.inspector import inspect_content
 from core.security import TaskPolicy
 from workspace.simulated import SimWorkspace
@@ -28,7 +30,7 @@ def _save_run_log(run: ApprovalRun):
         print(f"Error saving run log: {e}")
 
 
-@router.get("/documents")
+@router.get("/documents", dependencies=[require_roles("admin", "operator", "auditor")])
 def get_documents():
     if not DATA_FILE.exists():
         raise HTTPException(status_code=404, detail="Documents file not found")
@@ -36,6 +38,8 @@ def get_documents():
 
     results = []
     for doc_id, item in data.items():
+        if doc_id == "confidential_budget" or item.get("is_confidential"):
+            continue
         content = item.get("content", "")
         findings = inspect_content(content)
         results.append({
@@ -49,19 +53,44 @@ def get_documents():
     return results
 
 
-@router.post("/run")
+@router.post("/run", dependencies=[require_roles("admin", "operator")])
 def start_task_run(req: RunTaskRequest):
     if not req.task.strip():
         raise HTTPException(status_code=400, detail="Task text cannot be empty")
 
     allowed_tools = {"read_doc", "send_email"} if req.allow_email else {"read_doc"}
-    allowed_recipients = {req.recipient.strip()} if req.allow_email and req.recipient else set()
+    known_documents = json.loads(DATA_FILE.read_text(encoding="utf-8-sig"))
+    requested_documents = set(req.allowed_documents or [req.document_id])
+    requested_documents.add(req.document_id)
+    unknown_documents = requested_documents - set(known_documents)
+    confidential_documents = {
+        doc_id for doc_id in requested_documents
+        if known_documents.get(doc_id, {}).get("is_confidential") or doc_id == "confidential_budget"
+    }
+    if unknown_documents or confidential_documents:
+        raise HTTPException(status_code=422, detail="Policy document scope contains unknown or restricted documents")
+
+    recipient_values = req.allowed_recipients
+    if recipient_values is None:
+        recipient_values = [req.recipient] if req.recipient else []
+    allowed_recipients = {
+        address.strip().lower() for address in recipient_values
+        if isinstance(address, str) and address.strip()
+    } if req.allow_email else set()
+    if req.allow_email and not allowed_recipients:
+        raise HTTPException(status_code=422, detail="Email permission requires at least one allowed recipient")
+    if req.allow_email and any(
+        len(address) > 254 or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", address)
+        for address in allowed_recipients
+    ):
+        raise HTTPException(status_code=422, detail="Policy contains an invalid email recipient")
 
     policy = TaskPolicy(
         allowed_tools=frozenset(allowed_tools),
-        allowed_documents=frozenset({req.document_id}),
+        allowed_documents=frozenset(requested_documents),
         allowed_recipients=frozenset(allowed_recipients),
-        max_emails=1 if req.allow_email else 0
+        max_emails=req.max_emails if req.allow_email else 0,
+        required_subject=req.required_subject or None,
     )
 
     workspace = SimWorkspace(DATA_FILE)
@@ -78,7 +107,7 @@ def start_task_run(req: RunTaskRequest):
     return run.to_dict()
 
 
-@router.get("/run/{run_id}")
+@router.get("/run/{run_id}", dependencies=[require_roles("admin", "operator", "auditor")])
 def get_run_status(run_id: str):
     run = RUNS.get(run_id)
     if run:
@@ -95,7 +124,7 @@ def get_run_status(run_id: str):
     raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
 
 
-@router.post("/run/{run_id}/approval")
+@router.post("/run/{run_id}/approval", dependencies=[require_roles("admin", "operator")])
 def handle_approval(run_id: str, req: ApprovalDecisionRequest):
     run = RUNS.get(run_id)
     if not run:
@@ -114,7 +143,7 @@ def handle_approval(run_id: str, req: ApprovalDecisionRequest):
     return run.to_dict()
 
 
-@router.post("/run/{run_id}/cancel")
+@router.post("/run/{run_id}/cancel", dependencies=[require_roles("admin", "operator")])
 def cancel_run(run_id: str):
     run = RUNS.get(run_id)
     if not run:
@@ -125,7 +154,7 @@ def cancel_run(run_id: str):
     return run.to_dict()
 
 
-@router.get("/runs")
+@router.get("/runs", dependencies=[require_roles("admin", "operator", "auditor")])
 def list_runs():
     results = []
     if LOGS_DIR.exists():

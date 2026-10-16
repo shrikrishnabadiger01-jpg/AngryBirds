@@ -4,7 +4,6 @@ Handles listing real emails from Gmail API and running security analysis.
 Treats all email content strictly as untrusted external data.
 """
 
-import re
 import json
 import datetime
 from typing import Optional, List, Dict, Any
@@ -13,8 +12,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db, AuditLog
+from app.auth import require_roles
 from app.services import gmail_service
 from core.inspector import inspect_content
+from core.phishing import inspect_phishing_indicators
 
 router = APIRouter(prefix="/api/emails", tags=["Emails"])
 
@@ -27,7 +28,7 @@ class AnalyzeEmailRequest(BaseModel):
     recipient: Optional[str] = None
 
 
-@router.get("")
+@router.get("", dependencies=[require_roles("admin", "operator", "auditor")])
 async def list_emails(
     max_results: int = Query(15, ge=1, le=50),
     page_token: Optional[str] = None,
@@ -62,7 +63,7 @@ async def list_emails(
         raise HTTPException(status_code=500, detail=f"Failed to fetch Gmail inbox: {str(e)}")
 
 
-@router.post("/analyze")
+@router.post("/analyze", dependencies=[require_roles("admin", "operator")])
 async def analyze_email_security(req: AnalyzeEmailRequest, db: Session = Depends(get_db)):
     """
     Run security analysis on a real Gmail message.
@@ -75,32 +76,14 @@ async def analyze_email_security(req: AnalyzeEmailRequest, db: Session = Depends
     injection_findings = inspect_content(text_to_scan)
 
     # 2. Phishing & Malicious Indicator Rules
-    indicators = []
-
-    # Credential Harvesting / Account Takeover
-    cred_patterns = [
-        (r"\b(password|passcode|pin|credentials?)\s*(reset|expired|update|verify)\b", "Credential harvesting attempt"),
-        (r"\b(bank\s*account|credit\s*card|ssn|social\s*security)\b", "Sensitive financial / PII request"),
-        (r"\b(verify\s*your\s*identity|account\s*suspended|security\s*alert)\b", "Urgency / account suspension trigger"),
-    ]
-    for pattern, desc in cred_patterns:
-        if re.search(pattern, text_to_scan, re.I):
-            indicators.append({"type": "CREDENTIAL_PHISHING", "description": desc})
-
-    # Malicious URLs / IP Links
-    url_patterns = [
-        (r"https?://\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}", "Direct IP address URL found"),
-        (r"https?://[^\s]+\.(ru|xyz|top|work|click)/", "Suspicious TLD link detected"),
-    ]
-    for pattern, desc in url_patterns:
-        if re.search(pattern, text_to_scan, re.I):
-            indicators.append({"type": "SUSPICIOUS_LINK", "description": desc})
+    indicators = inspect_phishing_indicators(text_to_scan)
 
     # Prompt Injection & Directive Overrides
     for finding in injection_findings:
         indicators.append({
             "type": "PROMPT_INJECTION",
-            "description": f"Directive detected: '{finding['signal']}' in matched text: '{finding['matched_text']}'"
+            "description": f"Directive detected: '{finding['signal']}' in matched text: '{finding['matched_text']}'",
+            "matched_text": finding["matched_text"],
         })
 
     # 3. Decision Determination

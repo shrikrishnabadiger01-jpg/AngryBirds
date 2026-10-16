@@ -12,10 +12,14 @@ class PolicyConfig(BaseModel):
 
 
 class RunTaskRequest(BaseModel):
-    task: str
-    document_id: str
+    task: str = Field(min_length=1, max_length=8000)
+    document_id: str = Field(min_length=1, max_length=200)
     allow_email: bool = False
-    recipient: Optional[str] = "manager@example.com"
+    recipient: Optional[str] = Field(default="manager@example.com", max_length=254)
+    allowed_documents: Optional[List[str]] = Field(default=None, max_length=100)
+    allowed_recipients: Optional[List[str]] = Field(default=None, max_length=50)
+    max_emails: int = Field(default=1, ge=0, le=10)
+    required_subject: Optional[str] = Field(default=None, max_length=200)
 
 
 class ApprovalDecisionRequest(BaseModel):

@@ -3,8 +3,6 @@ AI Agent Security — Configuration
 Loads settings from environment variables with secure defaults.
 """
 
-import os
-import secrets
 from pathlib import Path
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
@@ -19,19 +17,22 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # Google OAuth 2.0 (read-only Gmail)
-    google_client_id: str = "280268833822-00m7mdod6anu91htdu6rucgpc5iskij4.apps.googleusercontent.com"
-    google_client_secret: str = "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"
+    google_client_id: str = ""
+    google_client_secret: str = ""
     google_redirect_uri: str = "http://localhost:8000/api/gmail/callback"
 
     # App URLs
     frontend_url: str = "http://localhost:5173"
-    secret_key: str = secrets.token_urlsafe(32)
+    secret_key: str = ""
+    app_env: str = "development"
+    auth_enabled: bool = False
+    auth_users_json: str = ""
 
     # SQLite Database for server-side OAuth credentials and audit logs
     database_url: str = "sqlite:///./security_gate.db"
 
     # MiniMoth LLM API Key (paste your API key here or in .env)
-    minimoth_api_key: str = "mm_test_9829e7b84fb37764f1ce0bfa6a7cfa2c5c5f3df3e09407f75c0ec6e3dbd7b18ad4bf60818f86e324be6b846e4b60c0b7"
+    minimoth_api_key: str = ""
 
     # Gmail API scope — STRICTLY READ-ONLY
     gmail_scopes: list[str] = ["https://www.googleapis.com/auth/gmail.readonly"]
@@ -63,6 +64,17 @@ class Settings(BaseSettings):
                 default_val = self.__class__.model_fields[field_name].default
                 if default_val and str(default_val).strip():
                     setattr(self, field_name, str(default_val).strip())
+        return self
+
+    @model_validator(mode="after")
+    def require_production_access_controls(self):
+        if self.app_env.lower() == "production":
+            if not self.auth_enabled:
+                raise ValueError("AUTH_ENABLED=true is required in production")
+            if len(self.secret_key) < 32:
+                raise ValueError("SECRET_KEY must contain at least 32 characters in production")
+            if not self.auth_users_json.strip():
+                raise ValueError("APP_USERS_JSON must configure at least one user in production")
         return self
 
     model_config = {"env_file": ".env", "extra": "ignore"}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Cpu, Activity, Layers, Mail } from 'lucide-react';
+import { Shield, Cpu, Activity, Layers, Mail, FileSearch } from 'lucide-react';
 
 export default function Header({
   activeTab,
@@ -7,6 +7,9 @@ export default function Header({
   health,
   gmailStatus,
   onConnectGmail,
+  authUser,
+  onLogout,
+  canOperate = true,
 }) {
   const isHealthy = health?.status === 'healthy';
   const isMiniMothLive = Boolean(health?.minimoth_api_key_configured || health?.gemini_api_key_configured);
@@ -70,6 +73,14 @@ export default function Header({
           </button>
 
           <button
+            type="button"
+            onClick={() => onSelectTab('audit')}
+            className={`nav-tab-btn ${activeTab === 'audit' ? 'active' : ''}`}
+          >
+            <FileSearch size={15} />
+            <span>Audit History</span>
+          </button>
+          <button
             id="nav-tab-gmail"
             type="button"
             onClick={() => onSelectTab('gmail')}
@@ -96,6 +107,7 @@ export default function Header({
             id="gmail-integration-btn"
             type="button"
             onClick={handleGmailButtonClick}
+            disabled={!isGmailConnected && !canOperate}
             title={isGmailConnected ? `Connected as ${gmailEmail}. Click to view inbox.` : 'Click to connect Google OAuth'}
             style={{
               display: 'inline-flex',
@@ -132,6 +144,12 @@ export default function Header({
               {isMiniMothLive ? 'MiniMoth Live' : 'High-Fidelity Simulator'}
             </span>
           </div>
+          {authUser && (
+            <button type="button" onClick={onLogout} className="nav-tab-btn" title={`Sign out ${authUser.username}`}>
+              <span>{authUser.username} · {authUser.role}</span>
+              <span>Sign out</span>
+            </button>
+          )}
         </div>
       </div>
     </header>

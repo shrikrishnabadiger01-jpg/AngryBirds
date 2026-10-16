@@ -55,11 +55,15 @@ export default function WorkspaceTab({
   onStartRun,
   onApproveProposal,
   onCancelRun,
+  canOperate = true,
 }) {
   const [selectedDocId, setSelectedDocId] = useState('project_report');
   const [taskText, setTaskText] = useState('Summarize the delayed milestones and their reasons.');
   const [allowEmail, setAllowEmail] = useState(false);
-  const [recipient, setRecipient] = useState('manager@example.com');
+  const [recipientAllowlist, setRecipientAllowlist] = useState('manager@example.com');
+  const [allowedDocuments, setAllowedDocuments] = useState(['project_report']);
+  const [maxEmails, setMaxEmails] = useState(1);
+  const [requiredSubject, setRequiredSubject] = useState('');
   const [showDocInspector, setShowDocInspector] = useState(false);
   const [showAuditLogs, setShowAuditLogs] = useState(true);
 
@@ -70,6 +74,7 @@ export default function WorkspaceTab({
     setSelectedDocId(preset.docId);
     setTaskText(preset.task);
     setAllowEmail(preset.allowEmail);
+    setAllowedDocuments([preset.docId]);
   };
 
   const handleSubmit = (e) => {
@@ -79,7 +84,10 @@ export default function WorkspaceTab({
       task: taskText.trim(),
       document_id: selectedDocId,
       allow_email: allowEmail,
-      recipient: recipient.trim() || 'manager@example.com'
+      allowed_documents: [...new Set([selectedDocId, ...allowedDocuments])],
+      allowed_recipients: recipientAllowlist.split(/[\n,;]/).map(value => value.trim()).filter(Boolean),
+      max_emails: Number(maxEmails),
+      required_subject: requiredSubject.trim() || null,
     });
   };
 
@@ -110,7 +118,7 @@ export default function WorkspaceTab({
       <div className="hero-banner">
         <h1 className="hero-title">Give your agent a task.</h1>
         <p className="hero-subtitle">
-          You set the permissions. Our runtime security gate checks and authorizes every single tool call.
+          Agent runs use simulated documents and a simulated outbox. They never send real email; the Gmail tab reads a real inbox with read-only access.
         </p>
       </div>
 
@@ -210,7 +218,7 @@ export default function WorkspaceTab({
             {/* Fixed Permissions */}
             <div className="form-group" style={{ paddingTop: '10px', borderTop: '1px solid var(--border-subtle)' }}>
               <label className="form-label" style={{ color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Fixed Task Permissions
+                Task Permissions
               </label>
 
               {/* Read Doc (Mandatory) */}
@@ -224,8 +232,20 @@ export default function WorkspaceTab({
                 <div>
                   <div className="permission-title">Read selected document</div>
                   <div className="permission-desc">
-                    Scope restricted strictly to <code style={{ color: '#34d399' }}>{selectedDocId}</code>
+                    Selected document is always in scope. Add other non-confidential documents below.
                   </div>
+                </div>
+              </div>
+
+              <div className="permission-box" style={{ display: 'block' }}>
+                <div className="permission-title">Additional allowed documents</div>
+                <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
+                  {docsList.filter(doc => !doc.is_confidential && doc.id !== selectedDocId).map(doc => (
+                    <label key={doc.id} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12 }}>
+                      <input type="checkbox" checked={allowedDocuments.includes(doc.id)} onChange={(event) => setAllowedDocuments(current => event.target.checked ? [...new Set([...current, doc.id])] : current.filter(id => id !== doc.id))} />
+                      {doc.title} ({doc.id})
+                    </label>
+                  ))}
                 </div>
               </div>
 
@@ -240,18 +260,16 @@ export default function WorkspaceTab({
                 <div style={{ flex: 1 }}>
                   <div className="permission-title">Send simulated email to manager</div>
                   <div className="permission-desc">
-                    Authorized recipient: <code style={{ color: '#5eead4' }}>manager@example.com</code>. Requires human approval before sending.
+                    Only addresses in the allowlist are permitted. Sending requires human approval.
                   </div>
                   {allowEmail && (
                     <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--border-subtle)' }}>
-                      <input
-                        type="email"
-                        value={recipient}
-                        onChange={(e) => setRecipient(e.target.value)}
-                        placeholder="Authorized recipient address"
-                        className="form-input"
-                        style={{ fontSize: '12px', padding: '8px 12px' }}
-                      />
+                      <label className="form-label" style={{ marginTop: 8 }}>Allowed recipient addresses (comma or newline separated)</label>
+                      <textarea value={recipientAllowlist} onChange={(e) => setRecipientAllowlist(e.target.value)} rows={2} className="form-textarea" aria-label="Allowed recipient addresses" />
+                      <label className="form-label" style={{ marginTop: 8 }}>Maximum emails this run</label>
+                      <input type="number" min="0" max="10" value={maxEmails} onChange={(e) => setMaxEmails(e.target.value)} className="form-input" />
+                      <label className="form-label" style={{ marginTop: 8 }}>Required subject (optional)</label>
+                      <input type="text" maxLength="200" value={requiredSubject} onChange={(e) => setRequiredSubject(e.target.value)} className="form-input" placeholder="Exact subject required by policy" />
                     </div>
                   )}
                 </div>
@@ -261,7 +279,7 @@ export default function WorkspaceTab({
             {/* Action Button */}
             <button
               type="submit"
-              disabled={isRunning || !taskText.trim()}
+              disabled={!canOperate || isRunning || !taskText.trim()}
               className="btn-run-agent"
             >
               {isRunning ? (
@@ -272,7 +290,7 @@ export default function WorkspaceTab({
               ) : (
                 <>
                   <Send size={16} />
-                  Run Agent
+                  {canOperate ? 'Run Agent' : 'Operator role required'}
                 </>
               )}
             </button>
@@ -515,7 +533,7 @@ export default function WorkspaceTab({
               <div className="panel-header">
                 <span className="panel-title">
                   <Mail size={16} color="#14b8a6" />
-                  Simulated Outbox ({currentRun.outbox.length})
+                  Simulated Outbox ({currentRun.outbox.length}) · no real email sent
                 </span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

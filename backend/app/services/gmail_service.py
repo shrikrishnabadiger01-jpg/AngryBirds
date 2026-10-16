@@ -23,6 +23,7 @@ from googleapiclient.errors import HttpError
 
 from app.config import settings
 from app.database import SessionLocal, UserCredential
+from app.secret_store import is_protected, protect, reveal
 
 
 def get_stored_credentials() -> Tuple[Optional[Credentials], Optional[str]]:
@@ -39,21 +40,28 @@ def get_stored_credentials() -> Tuple[Optional[Credentials], Optional[str]]:
         scopes = json.loads(user_cred.scopes) if user_cred.scopes else settings.gmail_scopes
 
         creds = Credentials(
-            token=user_cred.token,
-            refresh_token=user_cred.refresh_token,
+            token=reveal(user_cred.token),
+            refresh_token=reveal(user_cred.refresh_token),
             token_uri=user_cred.token_uri,
             client_id=user_cred.client_id,
-            client_secret=user_cred.client_secret,
+            client_secret=reveal(user_cred.client_secret),
             scopes=scopes,
             expiry=user_cred.expiry,
         )
+
+        # Upgrade existing plaintext records on first access after production encryption is enabled.
+        if settings.secret_key and any(not is_protected(value) for value in (user_cred.token, user_cred.refresh_token, user_cred.client_secret)):
+            user_cred.token = protect(user_cred.token)
+            user_cred.refresh_token = protect(user_cred.refresh_token)
+            user_cred.client_secret = protect(user_cred.client_secret)
+            db.commit()
 
         # If expired, attempt token refresh
         if creds.expired and creds.refresh_token:
             try:
                 creds.refresh(Request())
                 # Update DB with fresh token and expiry
-                user_cred.token = creds.token
+                user_cred.token = protect(creds.token)
                 user_cred.expiry = creds.expiry
                 user_cred.updated_at = datetime.datetime.utcnow()
                 db.commit()
@@ -81,23 +89,23 @@ def save_credentials(creds: Credentials, email: str) -> None:
 
         if user_cred:
             user_cred.email = email
-            user_cred.token = creds.token
+            user_cred.token = protect(creds.token)
             if creds.refresh_token:
-                user_cred.refresh_token = creds.refresh_token
+                user_cred.refresh_token = protect(creds.refresh_token)
             user_cred.token_uri = creds.token_uri or "https://oauth2.googleapis.com/token"
             user_cred.client_id = creds.client_id or settings.google_client_id
-            user_cred.client_secret = creds.client_secret or settings.google_client_secret
+            user_cred.client_secret = protect(creds.client_secret or settings.google_client_secret)
             user_cred.scopes = scopes_json
             user_cred.expiry = creds.expiry
             user_cred.updated_at = datetime.datetime.utcnow()
         else:
             user_cred = UserCredential(
                 email=email,
-                token=creds.token,
-                refresh_token=creds.refresh_token,
+                token=protect(creds.token),
+                refresh_token=protect(creds.refresh_token),
                 token_uri=creds.token_uri or "https://oauth2.googleapis.com/token",
                 client_id=creds.client_id or settings.google_client_id,
-                client_secret=creds.client_secret or settings.google_client_secret,
+                client_secret=protect(creds.client_secret or settings.google_client_secret),
                 scopes=scopes_json,
                 expiry=creds.expiry,
             )

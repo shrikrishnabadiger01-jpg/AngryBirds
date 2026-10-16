@@ -15,6 +15,25 @@ async function handleResponse(response) {
 }
 
 export const api = {
+  async getAuthSession() {
+    const res = await fetch(`${API_BASE}/auth/session`);
+    return handleResponse(res);
+  },
+
+  async login(username, password) {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    return handleResponse(res);
+  },
+
+  async logout() {
+    const res = await fetch(`${API_BASE}/auth/logout`, { method: 'POST' });
+    return handleResponse(res);
+  },
+
   async getHealth() {
     const res = await fetch(`${API_BASE}/health`);
     return handleResponse(res);
@@ -25,11 +44,11 @@ export const api = {
     return handleResponse(res);
   },
 
-  async startRun({ task, document_id, allow_email, recipient }) {
+  async startRun({ task, document_id, allow_email, recipient, allowed_documents, allowed_recipients, max_emails, required_subject }) {
     const res = await fetch(`${API_BASE}/workspace/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ task, document_id, allow_email, recipient }),
+      body: JSON.stringify({ task, document_id, allow_email, recipient, allowed_documents, allowed_recipients, max_emails, required_subject }),
     });
     return handleResponse(res);
   },
@@ -57,6 +76,15 @@ export const api = {
 
   async getRunsHistory() {
     const res = await fetch(`${API_BASE}/workspace/runs`);
+    return handleResponse(res);
+  },
+
+  async getAudit({ q = '', source = '', decision = '', page = 1, page_size = 25 } = {}) {
+    const params = new URLSearchParams({ page, page_size });
+    if (q) params.set('q', q);
+    if (source) params.set('source', source);
+    if (decision) params.set('decision', decision);
+    const res = await fetch(`${API_BASE}/audit?${params}`);
     return handleResponse(res);
   },
 

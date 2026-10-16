@@ -12,6 +12,7 @@ from core.security import TaskPolicy
 class ApprovalRun:
     def __init__(self, task: str, document_id: str, policy: TaskPolicy, workspace):
         self.run_id = uuid4().hex
+        self.created_at = datetime.now(timezone.utc).isoformat()
         self.task = task
         self.document_id = document_id
         self.policy = policy
@@ -69,6 +70,7 @@ class ApprovalRun:
         approved = approved and not expired
         self.approvals.append({
             "run_id": self.run_id,
+            "created_at": self.created_at,
             "payload_sha256": self.pending["digest"],
             "decision": "expired" if expired else "approved" if approved else "denied",
             "recorded_at": datetime.now(timezone.utc).isoformat(),

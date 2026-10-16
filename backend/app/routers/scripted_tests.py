@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from app.schemas import ScriptedTestRunRequest
+from app.auth import require_roles
 from core.security import TaskPolicy
 from workspace.simulated import SimWorkspace, GateDisabledWorkspace
 
@@ -49,12 +50,12 @@ BENCHMARK_CASES = [
 ]
 
 
-@router.get("/cases")
+@router.get("/cases", dependencies=[require_roles("admin", "operator", "auditor")])
 def get_cases():
     return BENCHMARK_CASES
 
 
-@router.post("/run")
+@router.post("/run", dependencies=[require_roles("admin", "operator")])
 def run_scripted_tests(req: ScriptedTestRunRequest):
     policy = TaskPolicy(
         allowed_tools=frozenset({"read_doc", "send_email"}),

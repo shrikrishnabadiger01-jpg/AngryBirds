@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Layers, Play, CheckCircle2, Shield, RefreshCw } from 'lucide-react';
 
-export default function ScriptedTestsTab({ onRunScriptedTests, isRunning }) {
+export default function ScriptedTestsTab({ onRunScriptedTests, isRunning, canOperate = true }) {
   const [resultsData, setResultsData] = useState(null);
 
   const handleRun = async () => {
@@ -28,7 +28,7 @@ export default function ScriptedTestsTab({ onRunScriptedTests, isRunning }) {
         <button
           type="button"
           onClick={handleRun}
-          disabled={isRunning}
+            disabled={!canOperate || isRunning}
           className="btn-approve"
           style={{ padding: '10px 20px', fontSize: '13px' }}
         >

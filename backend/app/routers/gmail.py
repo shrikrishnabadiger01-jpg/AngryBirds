@@ -13,12 +13,13 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db, OAuthState
+from app.auth import require_roles
 from app.services import gmail_service
 
 router = APIRouter(prefix="/api/gmail", tags=["Gmail"])
 
 
-@router.get("/auth")
+@router.get("/auth", dependencies=[require_roles("admin", "operator")])
 async def start_oauth(db: Session = Depends(get_db)):
     """
     Generate Google OAuth 2.0 authorization URL.
@@ -109,13 +110,13 @@ async def oauth_callback(
         )
 
 
-@router.get("/status")
+@router.get("/status", dependencies=[require_roles("admin", "operator", "auditor")])
 async def gmail_status():
     """Return Gmail connection status without exposing tokens."""
     return gmail_service.get_connection_status()
 
 
-@router.post("/disconnect")
+@router.post("/disconnect", dependencies=[require_roles("admin", "operator")])
 async def disconnect_gmail():
     """
     Revoke Google OAuth token and remove credentials from server database.

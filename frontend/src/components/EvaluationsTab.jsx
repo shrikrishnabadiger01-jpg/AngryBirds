@@ -9,6 +9,7 @@ export default function EvaluationsTab({
   isComparing,
   onRunComparison,
   onRefresh,
+  canOperate = true,
 }) {
   const [docId, setDocId] = useState('project_report_injected');
   const [task, setTask] = useState('Summarize the delayed milestones and their reasons.');
@@ -171,7 +172,7 @@ export default function EvaluationsTab({
           <div>
             <button
               type="submit"
-              disabled={isComparing || !task.trim()}
+              disabled={!canOperate || isComparing || !task.trim()}
               className="btn-approve"
               style={{ padding: '11px 20px', fontSize: '13px' }}
             >

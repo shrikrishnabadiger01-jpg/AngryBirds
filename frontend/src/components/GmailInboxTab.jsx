@@ -10,6 +10,7 @@ export default function GmailInboxTab({
   onConnectGmail,
   onDisconnectGmail,
   onShowSetupModal,
+  canOperate = true,
 }) {
   const [emails, setEmails] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -87,10 +88,10 @@ export default function GmailInboxTab({
         <div>
           <h1 style={{ fontSize: '26px', fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 10 }}>
             <Mail size={26} color="#10b981" />
-            Live Gmail Inbox & Security Pipeline
+            Real Gmail Inbox · Read Only
           </h1>
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: 4 }}>
-            Read real incoming messages via Google OAuth (<code>gmail.readonly</code>) and scan with the runtime security gate.
+            This tab reads real messages through Google OAuth (<code>gmail.readonly</code>). It cannot send, delete, or modify mail. Agent-run emails are simulated separately.
           </p>
         </div>
 
@@ -122,6 +123,7 @@ export default function GmailInboxTab({
               <button
                 type="button"
                 onClick={onDisconnectGmail}
+                disabled={!canOperate}
                 className="btn-deny"
                 style={{ padding: '8px 14px', fontSize: '12px' }}
               >
@@ -133,6 +135,7 @@ export default function GmailInboxTab({
             <button
               type="button"
               onClick={onConnectGmail}
+              disabled={!canOperate}
               className="btn-approve"
               style={{ padding: '9px 18px', fontSize: '13px' }}
             >
@@ -190,6 +193,7 @@ export default function GmailInboxTab({
             <button
               type="button"
               onClick={onConnectGmail}
+              disabled={!canOperate}
               className="btn-approve"
               style={{ padding: '11px 24px', fontSize: '13px' }}
             >

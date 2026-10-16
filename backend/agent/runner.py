@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from dotenv import dotenv_values
 from core.security import TaskPolicy
@@ -92,6 +93,7 @@ def _simulated_steps(task: str, document_id: str, policy: TaskPolicy, workspace,
                 workspace.audit[-1]["approval"] = "approved_once"
             else:
                 workspace.audit.append({
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "tool": "send_email",
                     "arguments": json.loads(payload),
                     "decision": "DENY",
@@ -240,6 +242,7 @@ def _steps(task: str, document_id: str, policy: TaskPolicy, workspace, require_a
                     else:
                         email_denied = True
                         workspace.audit.append({
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
                             "tool": call.name, "arguments": json.loads(payload),
                             "decision": "DENY", "reason": "Email denied by user or approval expired",
                             "executed": False,

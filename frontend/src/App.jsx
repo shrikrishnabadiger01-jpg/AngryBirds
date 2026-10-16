@@ -5,6 +5,7 @@ import EvaluationsTab from './components/EvaluationsTab';
 import ScriptedTestsTab from './components/ScriptedTestsTab';
 import GmailInboxTab from './components/GmailInboxTab';
 import GmailSetupModal from './components/GmailSetupModal';
+import AuditTab from './components/AuditTab';
 import { api } from './services/api';
 
 export default function App() {
@@ -20,6 +21,11 @@ export default function App() {
   const [errorToast, setErrorToast] = useState(null);
   const [successToast, setSuccessToast] = useState(null);
   const [showSetupModal, setShowSetupModal] = useState(false);
+  const [authState, setAuthState] = useState({ required: false, user: null });
+  const [authLoading, setAuthLoading] = useState(true);
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
 
   const showError = (msg) => {
     setErrorToast(msg);
@@ -48,7 +54,7 @@ export default function App() {
     }
   };
 
-  // Check URL query parameters for OAuth redirect callback status
+  // Load the auth session before requesting protected application data.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const gmailParam = params.get('gmail');
@@ -65,8 +71,32 @@ export default function App() {
       window.history.replaceState({}, document.title, window.location.pathname);
     }
 
-    loadInitialData();
+    api.getAuthSession().then((session) => {
+      setAuthState(session);
+      if (!session.required || session.user) loadInitialData();
+    }).catch((error) => setLoginError(error.message || 'Could not check sign-in status'))
+      .finally(() => setAuthLoading(false));
   }, []);
+
+  const handleLogin = async (event) => {
+    event.preventDefault();
+    setLoginError('');
+    try {
+      const user = await api.login(loginUsername, loginPassword);
+      setAuthState({ required: true, user });
+      setLoginPassword('');
+      await loadInitialData();
+    } catch (error) {
+      setLoginError(error.message || 'Sign-in failed');
+    }
+  };
+
+  const handleLogout = async () => {
+    await api.logout().catch(() => {});
+    setAuthState({ ...authState, user: null });
+    setGmailStatus({ connected: false, email: null, configured: false });
+    setCurrentRun(null);
+  };
 
   const handleConnectGmail = async () => {
     try {
@@ -96,10 +126,10 @@ export default function App() {
     }
   };
 
-  const handleStartRun = async ({ task, document_id, allow_email, recipient }) => {
+  const handleStartRun = async (runSettings) => {
     setIsRunning(true);
     try {
-      const run = await api.startRun({ task, document_id, allow_email, recipient });
+      const run = await api.startRun(runSettings);
       setCurrentRun(run);
       api.getEvaluations().then(setEvaluations).catch(() => {});
     } catch (e) {
@@ -160,6 +190,20 @@ export default function App() {
   };
 
   return (
+    authLoading ? (
+      <main className="main-content"><div className="glass-panel">Checking sign-in status…</div></main>
+    ) : authState.required && !authState.user ? (
+      <main className="main-content" style={{ maxWidth: 480, margin: '12vh auto' }}>
+        <form className="glass-panel" onSubmit={handleLogin}>
+          <h1 style={{ color: '#fff', fontSize: 22, marginBottom: 8 }}>Sign in</h1>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: 20 }}>Use your organization account to access the security workspace.</p>
+          <label className="form-group"><span className="form-label">Username</span><input autoComplete="username" className="form-input" value={loginUsername} onChange={event => setLoginUsername(event.target.value)} required /></label>
+          <label className="form-group"><span className="form-label">Password</span><input autoComplete="current-password" type="password" className="form-input" value={loginPassword} onChange={event => setLoginPassword(event.target.value)} required /></label>
+          {loginError && <p role="alert" style={{ color: '#fb7185', marginBottom: 12 }}>{loginError}</p>}
+          <button type="submit" className="btn-approve">Sign in</button>
+        </form>
+      </main>
+    ) : (
     <div className="app-shell">
       {/* Toast Notifications */}
       {errorToast && (
@@ -239,6 +283,9 @@ export default function App() {
         health={health}
         gmailStatus={gmailStatus}
         onConnectGmail={handleConnectGmail}
+        authUser={authState.user}
+        onLogout={handleLogout}
+        canOperate={['admin', 'operator'].includes(authState.user?.role)}
       />
 
       {/* Main Content Areas */}
@@ -251,6 +298,7 @@ export default function App() {
             onStartRun={handleStartRun}
             onApproveProposal={handleApproveProposal}
             onCancelRun={handleCancelRun}
+            canOperate={['admin', 'operator'].includes(authState.user?.role)}
           />
         )}
 
@@ -259,6 +307,7 @@ export default function App() {
             evaluations={evaluations}
             documents={documents}
             isComparing={isComparing}
+            canOperate={['admin', 'operator'].includes(authState.user?.role)}
             onRunComparison={handleRunComparison}
             onRefresh={() => api.getEvaluations().then(setEvaluations)}
           />
@@ -268,8 +317,11 @@ export default function App() {
           <ScriptedTestsTab
             onRunScriptedTests={handleRunScriptedTests}
             isRunning={isTesting}
+            canOperate={['admin', 'operator'].includes(authState.user?.role)}
           />
         )}
+
+        {activeTab === 'audit' && <AuditTab />}
 
         {activeTab === 'gmail' && (
           <GmailInboxTab
@@ -277,6 +329,7 @@ export default function App() {
             onConnectGmail={handleConnectGmail}
             onDisconnectGmail={handleDisconnectGmail}
             onShowSetupModal={() => setShowSetupModal(true)}
+            canOperate={['admin', 'operator'].includes(authState.user?.role)}
           />
         )}
       </main>
@@ -292,5 +345,6 @@ export default function App() {
         <p>AI Agent Security (Genesis 2.0) · Team Angry Birds · React + FastAPI Architecture with Gmail OAuth</p>
       </footer>
     </div>
+    )
   );
 }

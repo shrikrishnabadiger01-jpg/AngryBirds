@@ -59,7 +59,7 @@ def check_action(policy, tool, arguments):
         if any(c in arguments["subject"] for c in "\r\n"):
             return False, "Subject must be a single line"
 
-        if arguments["recipient"] not in policy.allowed_recipients:
+        if arguments["recipient"].strip().lower() not in policy.allowed_recipients:
             return False, "Recipient not authorized"
 
         if (

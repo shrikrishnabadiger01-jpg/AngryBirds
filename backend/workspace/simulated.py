@@ -1,5 +1,6 @@
 import hashlib
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from core.security import check_action, TaskPolicy
 
@@ -43,6 +44,7 @@ class SimWorkspace:
         allowed, reason, fingerprint = self.preview(policy, tool, arguments)
 
         event = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "tool": tool,
             "arguments": (
                 dict(arguments)

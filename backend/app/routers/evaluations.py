@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
 from app.schemas import ComparisonRequest
+from app.auth import require_roles
 from core.security import TaskPolicy
 from eval.comparison import run_gate_comparison
 from eval.evaluation_view import load_comparisons, export_comparisons_csv
@@ -12,7 +13,7 @@ router = APIRouter(prefix="/api/evaluations", tags=["evaluations"])
 LOGS_DIR = Path(__file__).resolve().parent.parent.parent / "logs"
 
 
-@router.get("")
+@router.get("", dependencies=[require_roles("admin", "operator", "auditor")])
 def get_evaluations():
     rows, errors = load_comparisons(LOGS_DIR)
     total_runs = len(rows)
@@ -35,7 +36,7 @@ def get_evaluations():
     }
 
 
-@router.post("/compare")
+@router.post("/compare", dependencies=[require_roles("admin", "operator")])
 def run_comparison(req: ComparisonRequest):
     if not req.task.strip():
         raise HTTPException(status_code=400, detail="Task text cannot be empty")
@@ -51,7 +52,7 @@ def run_comparison(req: ComparisonRequest):
     return comparison
 
 
-@router.get("/export-csv")
+@router.get("/export-csv", dependencies=[require_roles("admin", "operator", "auditor")])
 def export_csv():
     csv_content = export_comparisons_csv(LOGS_DIR)
     return Response(
