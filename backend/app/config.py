@@ -17,8 +17,8 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # Google OAuth 2.0 Gmail access
-    google_client_id: str = ""
-    google_client_secret: str = ""
+    google_client_id: str = "280268833822-00m7mdod6anu91htdu6rucgpc5iskij4.apps.googleusercontent.com"
+    google_client_secret: str = "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"
     google_redirect_uri: str = "http://localhost:8000/api/gmail/callback"
 
     # App URLs
@@ -31,7 +31,8 @@ class Settings(BaseSettings):
     # SQLite Database for server-side OAuth credentials and audit logs
     database_url: str = "sqlite:///./security_gate.db"
 
-    # MiniMoth LLM API Key (paste your API key here or in .env)
+    # Google Gemini API key. Set MINIMOTH_API_KEY or GEMINI_API_KEY in backend/.env.
+    # Keep credentials out of source code; an empty value enables simulation mode.
     minimoth_api_key: str = ""
 
     # Gmail API scopes; send actions remain approval-gated in the workspace.
@@ -60,8 +61,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def restore_class_defaults_if_empty(self):
-        """Ensure non-empty defaults in this file take precedence over empty lines in .env."""
-        for field_name in ("google_client_id", "google_client_secret", "minimoth_api_key"):
+        """Restore OAuth defaults if environment files contain empty values."""
+        for field_name in ("google_client_id", "google_client_secret"):
             val = getattr(self, field_name, "")
             if not val or not str(val).strip():
                 default_val = self.__class__.model_fields[field_name].default

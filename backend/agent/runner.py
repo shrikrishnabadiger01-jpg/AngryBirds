@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from dotenv import dotenv_values
@@ -77,13 +78,27 @@ def _simulated_steps(task: str, document_id: str, policy: TaskPolicy, workspace,
         }
         workspace.execute(policy, "send_email", redirect_args)
 
-    # Legitimate action: If policy allows email and user task requested an email or document is normal
-    if "send_email" in policy.allowed_tools and "manager@example.com" in policy.allowed_recipients:
-        legit_email = {
-            "recipient": "manager@example.com",
-            "subject": "Milestone Summary Update",
-            "body": f"Summary for {document_id}: API integration delayed by 3 days, security testing delayed by 2 days."
+    # The no-model path must not invent a canned answer or email. It can prepare
+    # a basic, source-grounded draft only when the user explicitly asks to email.
+    requested_email = bool(re.search(r"\b(email|mail|send)\b", task, re.IGNORECASE))
+    safe_content = doc_content.split("\n\n", 1)[0].strip()
+    doc_title = read_res.get("document", {}).get("title", document_id.replace("_", " ").title())
+    email_proposal = None
+    task_recipients = {
+        address.lower()
+        for address in re.findall(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", task, re.IGNORECASE)
+    }
+    matched_recipients = task_recipients & policy.allowed_recipients
+    recipient = next(iter(matched_recipients)) if len(matched_recipients) == 1 else (
+        next(iter(policy.allowed_recipients)) if len(policy.allowed_recipients) == 1 else None
+    )
+    if requested_email and safe_content and "send_email" in policy.allowed_tools and recipient:
+        email_proposal = {
+            "recipient": recipient,
+            "subject": policy.required_subject or f"Summary: {doc_title}",
+            "body": f"Summary of {doc_title}:\n\n{safe_content}",
         }
+        legit_email = email_proposal
         permitted, _, _ = workspace.preview(policy, "send_email", legit_email)
         if require_approval and permitted:
             payload = json.dumps(legit_email, sort_keys=True)
@@ -103,33 +118,23 @@ def _simulated_steps(task: str, document_id: str, policy: TaskPolicy, workspace,
         else:
             workspace.execute(policy, "send_email", legit_email)
 
-    # Formulate answer
+    # Report the source content instead of substituting unrelated sample output.
     if has_budget_attack:
-        answer = (
-            "### Milestone Summary\n\n"
-            "- **UI design**: Completed on time.\n"
-            "- **API integration**: Delayed by 3 days due to authentication issues.\n"
-            "- **Security testing**: Delayed by 2 days due to missing test data.\n\n"
-            "> **Security Note**: Untrusted instructions detected in the document attempted unauthorized access to "
-            "`confidential_budget` and data transmission to `attacker@example.com`. "
-            "Policy enforcement intercepted unauthorized calls."
-        )
+        security_note = "\n\nSecurity note: the document contained an instruction to access restricted data or send to an unapproved address; policy blocked it."
     elif has_redirect_attack:
-        answer = (
-            "### Milestone Summary\n\n"
-            "- **UI design**: Completed on time.\n"
-            "- **API integration**: Delayed by 3 days due to authentication issues.\n"
-            "- **Security testing**: Delayed by 2 days due to missing test data.\n\n"
-            "> **Notice**: Document requested redirecting to `attacker@example.com`, which is blocked by TaskPolicy."
-        )
+        security_note = "\n\nSecurity note: the document suggested an unapproved recipient; the task recipient policy was enforced."
     else:
-        answer = (
-            "### Project Milestone Summary\n\n"
-            "- **UI design**: Completed on schedule.\n"
-            "- **API integration**: Delayed by 3 days (authentication issues).\n"
-            "- **Security testing**: Delayed by 2 days (missing test data).\n\n"
-            f"Analysis based strictly on verified document: `{document_id}`."
-        )
+        security_note = ""
+
+    if not safe_content:
+        return f"I couldn't read usable content from `{doc_title}`."
+    answer = f"### {doc_title}\n\n{safe_content}{security_note}"
+    if requested_email and not policy.allowed_recipients:
+        answer += "\n\nI couldn't prepare the email because no allowed recipient was provided."
+    elif requested_email and not email_proposal and len(policy.allowed_recipients) > 1 and not recipient:
+        answer += "\n\nI couldn't choose a recipient because multiple addresses are allowed. Include one of them in the task."
+    elif email_proposal and require_approval:
+        answer += f"\n\nEmail draft prepared for `{email_proposal['recipient']}`; review the pending approval before it is sent."
 
     return answer
 

@@ -5,13 +5,13 @@ function PermissionToggle({ checked, disabled, label, tone = 'sage', onChange })
   return <button type="button" role="switch" aria-checked={checked} aria-label={label} disabled={disabled} onClick={() => onChange(!checked)} className={`tool-toggle ${checked ? 'checked' : ''} ${checked && tone === 'amber' ? 'amber' : ''}`}><span/></button>;
 }
 
-export default function ToolPermissions({ documentsEnabled, onDocumentsEnabledChange, allowEmail, onAllowEmailChange, gmailStatus, modelReady = false, canOperate = true, onConnectGmail, onDisconnectGmail }) {
+export default function ToolPermissions({ documentsEnabled, onDocumentsEnabledChange, allowEmail, onAllowEmailChange, gmailStatus, canOperate = true, onConnectGmail, onDisconnectGmail }) {
   const [manageOpen, setManageOpen] = useState(false);
   const gmailConnected = Boolean(gmailStatus?.connected);
   const gmailCanSend = Boolean(gmailStatus?.can_send);
   const permissions = [
     { name: 'Read emails', status: gmailConnected ? 'Read-only inbox' : 'Not connected', checked: gmailConnected, disabled: !canOperate, action: enabled => enabled ? onConnectGmail?.() : onDisconnectGmail?.() },
-    { name: 'Send emails', status: !gmailCanSend ? 'Grant Gmail access' : !modelReady ? 'Configure model' : allowEmail ? 'Require confirmation' : 'Disabled', checked: allowEmail, disabled: !canOperate || !gmailCanSend || !modelReady, tone: 'amber', action: onAllowEmailChange },
+    { name: 'Send emails', status: !gmailCanSend ? 'Grant Gmail access' : allowEmail ? 'Require confirmation' : 'Disabled', checked: allowEmail, disabled: !canOperate || !gmailCanSend, tone: 'amber', action: onAllowEmailChange },
     { name: 'Read documents', status: documentsEnabled ? 'Allow' : 'Disabled', checked: documentsEnabled, disabled: false, action: onDocumentsEnabledChange },
     { name: 'Web search', status: 'Unavailable', checked: false, disabled: true, action: () => {} },
     { name: 'Access messages', status: 'Disabled', checked: false, disabled: true, action: () => {} },
@@ -30,6 +30,6 @@ export default function ToolPermissions({ documentsEnabled, onDocumentsEnabledCh
       <PermissionToggle checked={permission.checked} disabled={permission.disabled} label={`${permission.name}: ${permission.status}`} tone={permission.tone} onChange={permission.name === 'Read emails' ? changeGmail : permission.action}/>
     </div>)}</div>
     <button type="button" className="manage-permissions-button" aria-expanded={manageOpen} onClick={() => setManageOpen(open => !open)}><Settings size={15}/>{manageOpen ? 'Hide Permission Details' : 'Manage Permissions'}</button>
-    {manageOpen && <div className="permission-details"><p>Document access follows the selected document scope.</p><p>Email actions require Gmail send access, a live model, per-task opt-in, and your approval of the exact message.</p>{!gmailCanSend && <button type="button" className="permission-authorize-button" disabled={!canOperate} onClick={onConnectGmail}>{gmailConnected ? 'Reconnect Gmail to grant send access' : 'Connect Gmail with send access'}</button>}{gmailCanSend && !modelReady && <p>Configure the agent model API key before enabling real email actions.</p>}<p>Web Search, Messages, and Calendar are unavailable until those integrations are configured.</p></div>}
+    {manageOpen && <div className="permission-details"><p>Document access follows the selected document scope.</p><p>Email actions require Gmail send access, per-task opt-in, an allowed recipient, and your approval of the exact message. Without a model API key, the app prepares a basic draft from the selected document.</p>{!gmailCanSend && <button type="button" className="permission-authorize-button" disabled={!canOperate} onClick={onConnectGmail}>{gmailConnected ? 'Reconnect Gmail to grant send access' : 'Connect Gmail with send access'}</button>}<p>Web Search, Messages, and Calendar are unavailable until those integrations are configured.</p></div>}
   </section>;
 }

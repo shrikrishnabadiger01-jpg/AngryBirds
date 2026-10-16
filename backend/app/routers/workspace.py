@@ -66,12 +66,6 @@ def start_task_run(req: RunTaskRequest):
             raise HTTPException(status_code=409, detail="Connect Gmail before enabling email sending.")
         if not gmail_status.get("can_send"):
             raise HTTPException(status_code=403, detail="Gmail send access is missing. Reconnect Gmail and grant the send permission.")
-        from agent.runner import get_minimoth_client
-        model_client, _ = get_minimoth_client()
-        if model_client is None:
-            raise HTTPException(status_code=503, detail="A live agent model is required to prepare an email. Configure the model API key first.")
-        model_client.close()
-
     allowed_tools = {"read_doc", "send_email"} if req.allow_email else {"read_doc"}
     known_documents = json.loads(DATA_FILE.read_text(encoding="utf-8-sig"))
     requested_documents = set(req.allowed_documents or [req.document_id])

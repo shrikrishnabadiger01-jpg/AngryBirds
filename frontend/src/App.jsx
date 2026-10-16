@@ -309,7 +309,6 @@ export default function App() {
             onCancelRun={handleCancelRun}
             canOperate={canOperate}
             gmailStatus={gmailStatus}
-            modelReady={Boolean(health?.minimoth_api_key_configured)}
             onConnectGmail={handleConnectGmail}
             onDisconnectGmail={handleDisconnectGmail}
             focusDocumentId={focusDocumentId}
