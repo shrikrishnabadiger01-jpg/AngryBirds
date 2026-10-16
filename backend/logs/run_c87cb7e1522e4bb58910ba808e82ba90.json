@@ -1,0 +1,44 @@
+{
+  "run_id": "c87cb7e1522e4bb58910ba808e82ba90",
+  "status": "error",
+  "task": "summarize 2 emails",
+  "document": "project_report",
+  "answer": null,
+  "error": "Request timed out. This is a client-side timeout. You can increase the timeout by setting the `timeout` argument on your request or in the client http options.",
+  "pending_approval": null,
+  "approvals": [],
+  "audit": [
+    {
+      "timestamp": "2026-10-16T19:02:21.867687+00:00",
+      "tool": "read_email",
+      "arguments": {
+        "email_id": "1a145aafe3f0a24e"
+      },
+      "decision": "ALLOW",
+      "reason": "Action permitted by task policy",
+      "executed": true
+    },
+    {
+      "timestamp": "2026-10-16T19:02:22.589762+00:00",
+      "tool": "read_email",
+      "arguments": {
+        "email_id": "1a1460496f1fc028"
+      },
+      "decision": "ALLOW",
+      "reason": "Action permitted by task policy",
+      "executed": true
+    }
+  ],
+  "outbox": [],
+  "policy": {
+    "allowed_tools": [
+      "read_email"
+    ],
+    "allowed_documents": [
+      "project_report"
+    ],
+    "allowed_recipients": [],
+    "max_emails": 0,
+    "required_subject": null
+  }
+}

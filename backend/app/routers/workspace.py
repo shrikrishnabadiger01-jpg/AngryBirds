@@ -66,7 +66,10 @@ def start_task_run(req: RunTaskRequest):
             raise HTTPException(status_code=409, detail="Connect Gmail before enabling email sending.")
         if not gmail_status.get("can_send"):
             raise HTTPException(status_code=403, detail="Gmail send access is missing. Reconnect Gmail and grant the send permission.")
-    if req.email_id:
+    email_ids = {email_id.strip() for email_id in (req.email_ids or []) if isinstance(email_id, str) and email_id.strip()}
+    if len(email_ids) > 20 or any(len(email_id) > 200 for email_id in email_ids):
+        raise HTTPException(status_code=422, detail="Email source selection is invalid")
+    if email_ids:
         gmail_status = gmail_service.get_connection_status()
         if not gmail_status.get("connected") or not gmail_service.has_scope("https://www.googleapis.com/auth/gmail.readonly"):
             raise HTTPException(status_code=403, detail="Connect Gmail with read access before summarizing an email.")
@@ -107,10 +110,10 @@ def start_task_run(req: RunTaskRequest):
         allowed_recipients=frozenset(allowed_recipients),
         max_emails=req.max_emails if req.allow_email else 0,
         required_subject=req.required_subject or None,
-        allowed_email_ids=frozenset({req.email_id}) if req.email_id else frozenset(),
+        allowed_email_ids=frozenset(email_ids),
     )
 
-    workspace = GmailWorkspace(DATA_FILE) if req.allow_email or req.email_id else SimWorkspace(DATA_FILE)
+    workspace = GmailWorkspace(DATA_FILE) if req.allow_email or email_ids else SimWorkspace(DATA_FILE)
     run = ApprovalRun(req.task, req.document_id, policy, workspace)
     RUNS[run.run_id] = run
 

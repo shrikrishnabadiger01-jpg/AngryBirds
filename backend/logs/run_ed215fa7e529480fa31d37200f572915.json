@@ -1,0 +1,44 @@
+{
+  "run_id": "ed215fa7e529480fa31d37200f572915",
+  "status": "error",
+  "task": "summarize 2 emails",
+  "document": "project_report",
+  "answer": null,
+  "error": "504 DEADLINE_EXCEEDED. {'error': {'code': 504, 'message': 'Deadline expired before operation could complete.', 'status': 'DEADLINE_EXCEEDED'}}",
+  "pending_approval": null,
+  "approvals": [],
+  "audit": [
+    {
+      "timestamp": "2026-10-16T18:54:53.232831+00:00",
+      "tool": "read_email",
+      "arguments": {
+        "email_id": "1a145aafe3f0a24e"
+      },
+      "decision": "ALLOW",
+      "reason": "Action permitted by task policy",
+      "executed": true
+    },
+    {
+      "timestamp": "2026-10-16T18:54:54.583266+00:00",
+      "tool": "read_email",
+      "arguments": {
+        "email_id": "1a1460496f1fc028"
+      },
+      "decision": "ALLOW",
+      "reason": "Action permitted by task policy",
+      "executed": true
+    }
+  ],
+  "outbox": [],
+  "policy": {
+    "allowed_tools": [
+      "read_email"
+    ],
+    "allowed_documents": [
+      "project_report"
+    ],
+    "allowed_recipients": [],
+    "max_emails": 0,
+    "required_subject": null
+  }
+}

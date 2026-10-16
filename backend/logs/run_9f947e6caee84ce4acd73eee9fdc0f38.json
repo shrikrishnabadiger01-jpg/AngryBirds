@@ -1,0 +1,54 @@
+{
+  "run_id": "9f947e6caee84ce4acd73eee9fdc0f38",
+  "status": "error",
+  "task": "summarize past 3 emails",
+  "document": "project_report",
+  "answer": null,
+  "error": "504 DEADLINE_EXCEEDED. {'error': {'code': 504, 'message': 'Deadline expired before operation could complete.', 'status': 'DEADLINE_EXCEEDED'}}",
+  "pending_approval": null,
+  "approvals": [],
+  "audit": [
+    {
+      "timestamp": "2026-10-16T18:58:16.898180+00:00",
+      "tool": "read_email",
+      "arguments": {
+        "email_id": "1a144f79e89872a9"
+      },
+      "decision": "ALLOW",
+      "reason": "Action permitted by task policy",
+      "executed": true
+    },
+    {
+      "timestamp": "2026-10-16T18:58:18.084102+00:00",
+      "tool": "read_email",
+      "arguments": {
+        "email_id": "1a145aafe3f0a24e"
+      },
+      "decision": "ALLOW",
+      "reason": "Action permitted by task policy",
+      "executed": true
+    },
+    {
+      "timestamp": "2026-10-16T18:58:19.499138+00:00",
+      "tool": "read_email",
+      "arguments": {
+        "email_id": "1a1460496f1fc028"
+      },
+      "decision": "ALLOW",
+      "reason": "Action permitted by task policy",
+      "executed": true
+    }
+  ],
+  "outbox": [],
+  "policy": {
+    "allowed_tools": [
+      "read_email"
+    ],
+    "allowed_documents": [
+      "project_report"
+    ],
+    "allowed_recipients": [],
+    "max_emails": 0,
+    "required_subject": null
+  }
+}

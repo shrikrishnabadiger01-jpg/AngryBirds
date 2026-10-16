@@ -17,10 +17,10 @@ export default function WorkspaceTab({ documents = [], currentRun, isRunning, on
   const [documentsEnabled, setDocumentsEnabled] = useState(documents.length > 0);
   const [sourceType, setSourceType] = useState('document');
   const [inboxEmails, setInboxEmails] = useState([]);
-  const [selectedEmailId, setSelectedEmailId] = useState('');
+  const [selectedEmailIds, setSelectedEmailIds] = useState([]);
   const [emailLoading, setEmailLoading] = useState(false);
   const docs = documents.filter(doc => !doc.is_confidential);
-  const emailSummaryRequest = /\b(?:summari[sz]e|summary)\b.{0,40}\b(?:email|inbox|message)\b|\b(?:email|inbox|message)\b.{0,40}\b(?:summari[sz]e|summary)\b/i.test(taskText);
+  const emailSummaryRequest = /\b(?:summari[sz]e|summary)\b.{0,40}\b(?:emails?|inboxes?|messages?)\b|\b(?:emails?|inboxes?|messages?)\b.{0,40}\b(?:summari[sz]e|summary)\b/i.test(taskText);
   useEffect(() => { if (docs.length > 0) setDocumentsEnabled(true); }, [docs.length]);
   const selectedDoc = docs.find(doc => doc.id === selectedDocId) || docs[0];
   useEffect(() => { if (docs.length && !docs.some(doc => doc.id === selectedDocId)) setSelectedDocId(docs[0].id); }, [documents, selectedDocId]);
@@ -28,16 +28,27 @@ export default function WorkspaceTab({ documents = [], currentRun, isRunning, on
   useEffect(() => { if (selectedDocId && !allowedDocuments.includes(selectedDocId)) setAllowedDocuments(current => [...current, selectedDocId]); }, [selectedDocId]);
   useEffect(() => {
     let active = true;
-    if (!gmailStatus?.connected) { setInboxEmails([]); setSelectedEmailId(''); return () => { active = false; }; }
+    if (!gmailStatus?.connected) { setInboxEmails([]); setSelectedEmailIds([]); return () => { active = false; }; }
     setEmailLoading(true);
     api.getEmails(20).then(result => {
       if (!active) return;
       const messages = result.emails || [];
       setInboxEmails(messages);
-      setSelectedEmailId(current => messages.some(email => email.id === current) ? current : messages[0]?.id || '');
+      setSelectedEmailIds(current => {
+        const stillAvailable = current.filter(id => messages.some(email => email.id === id));
+        return stillAvailable.length ? stillAvailable : messages.slice(0, 5).map(email => email.id);
+      });
     }).catch(() => { if (active) setInboxEmails([]); }).finally(() => { if (active) setEmailLoading(false); });
     return () => { active = false; };
   }, [gmailStatus?.connected]);
+  useEffect(() => {
+    if (!emailSummaryRequest || inboxEmails.length === 0) return;
+    const requestedCount = taskText.match(/\b(\d{1,2})\s+emails?\b/i)?.[1];
+    if (requestedCount) {
+      const count = Math.max(1, Math.min(Number(requestedCount), 20));
+      setSelectedEmailIds(inboxEmails.slice(0, count).map(email => email.id));
+    }
+  }, [emailSummaryRequest, taskText, inboxEmails]);
 
   const events = currentRun?.audit || [];
   const lastDecision = events.length ? events[events.length - 1] : null;
@@ -64,8 +75,8 @@ export default function WorkspaceTab({ documents = [], currentRun, isRunning, on
   const submit = event => {
     event.preventDefault();
     if (!taskText.trim() || isRunning || !canOperate) return;
-    if (sourceType === 'email' ? !selectedEmailId : (!selectedDoc || !documentsEnabled)) return;
-    onStartRun({ task: taskText.trim(), document_id: selectedDocId || docs[0]?.id || 'project_report', email_id: sourceType === 'email' ? selectedEmailId : null, allow_email: allowEmail, allowed_documents: [...new Set([selectedDocId, ...allowedDocuments].filter(Boolean))], allowed_recipients: recipientAllowlist.split(/[\n,;]/).map(value => value.trim()).filter(Boolean), max_emails: Number(maxEmails), required_subject: requiredSubject.trim() || null });
+    if (sourceType === 'email' ? selectedEmailIds.length === 0 : (!selectedDoc || !documentsEnabled)) return;
+    onStartRun({ task: taskText.trim(), document_id: selectedDocId || docs[0]?.id || 'project_report', email_ids: sourceType === 'email' ? selectedEmailIds : [], allow_email: allowEmail, allowed_documents: [...new Set([selectedDocId, ...allowedDocuments].filter(Boolean))], allowed_recipients: recipientAllowlist.split(/[\n,;]/).map(value => value.trim()).filter(Boolean), max_emails: Number(maxEmails), required_subject: requiredSubject.trim() || null });
   };
   const downloadRun = () => { if (!currentRun) return; const blob = new Blob([JSON.stringify(currentRun, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `agent_run_${currentRun.run_id || 'result'}.json`; anchor.click(); URL.revokeObjectURL(url); };
 
@@ -77,13 +88,13 @@ export default function WorkspaceTab({ documents = [], currentRun, isRunning, on
         <AvailableTools documents={docs} documentsEnabled={documentsEnabled} onDocumentsEnabledChange={setDocumentsEnabled} gmailStatus={gmailStatus} canOperate={canOperate} onConnectGmail={onConnectGmail} onDisconnectGmail={onDisconnectGmail}/>
         <ToolPermissions documentsEnabled={documentsEnabled} onDocumentsEnabledChange={setDocumentsEnabled} allowEmail={allowEmail} onAllowEmailChange={setAllowEmail} gmailStatus={gmailStatus} canOperate={canOperate} onConnectGmail={onConnectGmail} onDisconnectGmail={onDisconnectGmail}/>
         <section className="surface-card compact-card"><div className="eyebrow">Task source</div><h2>Choose what to read</h2><label className="field-label" htmlFor="workspace-source">Source type</label><select id="workspace-source" className="field-control" value={sourceType} onChange={e => setSourceType(e.target.value)}><option value="document">Workspace document</option><option value="email">Gmail inbox email</option></select>
-          {sourceType === 'document' ? <><label className="field-label" htmlFor="workspace-document">Selected document</label><select id="workspace-document" className="field-control" value={selectedDocId} onChange={e => setSelectedDocId(e.target.value)}>{docs.map(doc => <option key={doc.id} value={doc.id}>{doc.title}</option>)}</select><div className="scope-checks">{docs.filter(doc => doc.id !== selectedDocId).map(doc => <label key={doc.id}><input type="checkbox" checked={allowedDocuments.includes(doc.id)} onChange={e => setAllowedDocuments(list => e.target.checked ? [...new Set([...list, doc.id])] : list.filter(id => id !== doc.id))}/><span>{doc.title}</span></label>)}</div></> : <><label className="field-label" htmlFor="workspace-email">Selected inbox email</label>{gmailStatus?.connected ? <select id="workspace-email" className="field-control" value={selectedEmailId} onChange={e => setSelectedEmailId(e.target.value)} disabled={emailLoading || inboxEmails.length === 0}><option value="">{emailLoading ? 'Loading inbox…' : inboxEmails.length ? 'Choose an email' : 'No inbox emails found'}</option>{inboxEmails.map(email => <option key={email.id} value={email.id}>{email.subject || '(No subject)'} — {email.senderName || email.sender}</option>)}</select> : <><p className="muted-copy">Connect Gmail with read access to summarize an inbox email.</p><button type="button" className="button-secondary" onClick={onConnectGmail} disabled={!canOperate}>Connect Gmail</button></>}</>}
+          {sourceType === 'document' ? <><label className="field-label" htmlFor="workspace-document">Selected document</label><select id="workspace-document" className="field-control" value={selectedDocId} onChange={e => setSelectedDocId(e.target.value)}>{docs.map(doc => <option key={doc.id} value={doc.id}>{doc.title}</option>)}</select><div className="scope-checks">{docs.filter(doc => doc.id !== selectedDocId).map(doc => <label key={doc.id}><input type="checkbox" checked={allowedDocuments.includes(doc.id)} onChange={e => setAllowedDocuments(list => e.target.checked ? [...new Set([...list, doc.id])] : list.filter(id => id !== doc.id))}/><span>{doc.title}</span></label>)}</div></> : <><span className="field-label">Inbox emails to include</span>{gmailStatus?.connected ? <div className="scope-checks">{emailLoading ? <small>Loading inbox…</small> : inboxEmails.length ? inboxEmails.map(email => <label key={email.id}><input type="checkbox" checked={selectedEmailIds.includes(email.id)} onChange={e => setSelectedEmailIds(current => e.target.checked ? [...new Set([...current, email.id])] : current.filter(id => id !== email.id))}/><span>{email.subject || '(No subject)'} — {email.senderName || email.sender}</span></label>) : <small>No inbox emails found.</small>}</div> : <><p className="muted-copy">Connect Gmail with read access to summarize inbox emails.</p><button type="button" className="button-secondary" onClick={onConnectGmail} disabled={!canOperate}>Connect Gmail</button></>}</>}
         </section>
       </aside>
 
       <section className="workspace-center">
-        <form className="surface-card task-composer" onSubmit={submit}><label className="field-label" htmlFor="agent-task">What should the agent do?</label><div className="composer-row"><textarea id="agent-task" value={taskText} onChange={e => setTaskText(e.target.value)} rows={3} placeholder="Describe the task you want the agent to perform…" required/><button type="submit" className="button-primary run-button" disabled={!canOperate || isRunning || !taskText.trim() || (sourceType === 'email' ? !selectedEmailId : (!selectedDoc || !documentsEnabled))}>{isRunning ? <RefreshCw size={16} className="spin"/> : <Play size={16}/>}<span>{isRunning ? 'Running' : canOperate ? 'Run task' : 'Operator access required'}</span></button></div>
-          <div className="composer-foot"><span><LockKeyhole size={13}/> Policy is set before reading external content</span><span>{sourceType === 'email' ? (inboxEmails.find(email => email.id === selectedEmailId)?.subject || 'No email selected') : selectedDoc?.title || 'No document selected'}</span></div>
+        <form className="surface-card task-composer" onSubmit={submit}><label className="field-label" htmlFor="agent-task">What should the agent do?</label><div className="composer-row"><textarea id="agent-task" value={taskText} onChange={e => setTaskText(e.target.value)} rows={3} placeholder="Describe the task you want the agent to perform…" required/><button type="submit" className="button-primary run-button" disabled={!canOperate || isRunning || !taskText.trim() || (sourceType === 'email' ? selectedEmailIds.length === 0 : (!selectedDoc || !documentsEnabled))}>{isRunning ? <RefreshCw size={16} className="spin"/> : <Play size={16}/>}<span>{isRunning ? 'Running' : canOperate ? 'Run task' : 'Operator access required'}</span></button></div>
+          <div className="composer-foot"><span><LockKeyhole size={13}/> Policy is set before reading external content</span><span>{sourceType === 'email' ? `${selectedEmailIds.length} inbox email${selectedEmailIds.length === 1 ? '' : 's'} selected` : selectedDoc?.title || 'No document selected'}</span></div>
         </form>
 
         <section className="surface-card execution-card"><div className="section-heading"><div><div className="eyebrow">Execution flow</div><h2>Agent activity</h2></div><div className="run-status"><i className={`state-dot ${isRunning ? 'is-warn' : currentRun ? 'is-good' : 'is-neutral'}`}/>{isRunning ? 'In progress' : currentRun?.status || 'Ready'}</div></div>
@@ -111,16 +122,42 @@ export default function WorkspaceTab({ documents = [], currentRun, isRunning, on
 
 function SafeMarkdown({ text }) {
   const tokens = marked.lexer(text, { gfm: true });
+  const renderInline = (parts, prefix) => (parts || []).map((part, index) => {
+    const key = `${prefix}-${index}`;
+    const children = renderInline(part.tokens, key);
+    switch (part.type) {
+      case 'strong': return <strong key={key}>{children}</strong>;
+      case 'em': return <em key={key}>{children}</em>;
+      case 'del': return <del key={key}>{children}</del>;
+      case 'codespan': return <code key={key}>{part.text}</code>;
+      case 'br': return <br key={key}/>;
+      case 'link': {
+        const href = /^(https?:|mailto:)/i.test(part.href || '') ? part.href : null;
+        return href ? <a key={key} href={href} target="_blank" rel="noreferrer">{children}</a> : <React.Fragment key={key}>{children}</React.Fragment>;
+      }
+      case 'image': return <React.Fragment key={key}>{part.text}</React.Fragment>;
+      case 'text': return part.tokens ? <React.Fragment key={key}>{children}</React.Fragment> : part.text;
+      case 'escape':
+      case 'html': return <React.Fragment key={key}>{part.text}</React.Fragment>;
+      default: return <React.Fragment key={key}>{part.tokens ? children : (part.text || '')}</React.Fragment>;
+    }
+  });
+  const renderListItem = (item, prefix) => item.tokens?.length
+    ? item.tokens.map((part, index) => part.type === 'paragraph'
+      ? <p key={`${prefix}-${index}`}>{renderInline(part.tokens, `${prefix}-${index}`)}</p>
+      : <React.Fragment key={`${prefix}-${index}`}>{renderInline(part.tokens || [], `${prefix}-${index}`)}</React.Fragment>)
+    : renderInline(marked.Lexer.lexInline(item.text || ''), prefix);
   return <div className="markdown-answer">{tokens.map((token, index) => {
-    if (token.type === 'heading') return <h3 key={index}>{token.text}</h3>;
-    if (token.type === 'paragraph') return <p key={index}>{token.text}</p>;
+    const key = `block-${index}`;
+    if (token.type === 'heading') return <h3 key={key}>{renderInline(token.tokens, key)}</h3>;
+    if (token.type === 'paragraph') return <p key={key}>{renderInline(token.tokens, key)}</p>;
     if (token.type === 'list') {
       const List = token.ordered ? 'ol' : 'ul';
-      return <List key={index}>{token.items.map((item, itemIndex) => <li key={itemIndex}>{item.text}</li>)}</List>;
+      return <List key={key}>{token.items.map((item, itemIndex) => <li key={`${key}-${itemIndex}`}>{renderListItem(item, `${key}-${itemIndex}`)}</li>)}</List>;
     }
-    if (token.type === 'code') return <pre key={index}><code>{token.text}</code></pre>;
-    if (token.type === 'blockquote') return <blockquote key={index}>{token.text}</blockquote>;
-    if (token.type === 'hr') return <hr key={index}/>;
+    if (token.type === 'code') return <pre key={key}><code>{token.text}</code></pre>;
+    if (token.type === 'blockquote') return <blockquote key={key}>{(token.tokens || []).map((part, partIndex) => <p key={`${key}-${partIndex}`}>{renderInline(part.tokens, `${key}-${partIndex}`)}</p>)}</blockquote>;
+    if (token.type === 'hr') return <hr key={key}/>;
     return null;
   })}</div>;
 }

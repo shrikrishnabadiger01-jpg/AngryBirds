@@ -1,0 +1,124 @@
+{
+  "run_id": "c94d7efe069b4e51bdb4b6eb9233c205",
+  "status": "error",
+  "task": "summarize 2 emails",
+  "document": "project_report",
+  "answer": null,
+  "error": "504 DEADLINE_EXCEEDED. {'error': {'code': 504, 'message': 'Deadline expired before operation could complete.', 'status': 'DEADLINE_EXCEEDED'}}",
+  "pending_approval": null,
+  "approvals": [],
+  "audit": [
+    {
+      "timestamp": "2026-10-16T18:50:37.643773+00:00",
+      "tool": "read_email",
+      "arguments": {
+        "email_id": "1a13f3eda6a56818"
+      },
+      "decision": "ALLOW",
+      "reason": "Action permitted by task policy",
+      "executed": true
+    },
+    {
+      "timestamp": "2026-10-16T18:50:38.309479+00:00",
+      "tool": "read_email",
+      "arguments": {
+        "email_id": "1a13f3f51ff8601a"
+      },
+      "decision": "ALLOW",
+      "reason": "Action permitted by task policy",
+      "executed": true
+    },
+    {
+      "timestamp": "2026-10-16T18:50:39.101893+00:00",
+      "tool": "read_email",
+      "arguments": {
+        "email_id": "1a143010ddf1e5e9"
+      },
+      "decision": "ALLOW",
+      "reason": "Action permitted by task policy",
+      "executed": true
+    },
+    {
+      "timestamp": "2026-10-16T18:50:40.311557+00:00",
+      "tool": "read_email",
+      "arguments": {
+        "email_id": "1a143a8fef0c4fd3"
+      },
+      "decision": "ALLOW",
+      "reason": "Action permitted by task policy",
+      "executed": true
+    },
+    {
+      "timestamp": "2026-10-16T18:50:42.218936+00:00",
+      "tool": "read_email",
+      "arguments": {
+        "email_id": "1a1441c19ba4c095"
+      },
+      "decision": "ALLOW",
+      "reason": "Action permitted by task policy",
+      "executed": true
+    },
+    {
+      "timestamp": "2026-10-16T18:50:43.005388+00:00",
+      "tool": "read_email",
+      "arguments": {
+        "email_id": "1a1445f0552785fb"
+      },
+      "decision": "ALLOW",
+      "reason": "Action permitted by task policy",
+      "executed": true
+    },
+    {
+      "timestamp": "2026-10-16T18:50:44.134008+00:00",
+      "tool": "read_email",
+      "arguments": {
+        "email_id": "1a1446c55c98800c"
+      },
+      "decision": "ALLOW",
+      "reason": "Action permitted by task policy",
+      "executed": true
+    },
+    {
+      "timestamp": "2026-10-16T18:50:44.880096+00:00",
+      "tool": "read_email",
+      "arguments": {
+        "email_id": "1a144f79e89872a9"
+      },
+      "decision": "ALLOW",
+      "reason": "Action permitted by task policy",
+      "executed": true
+    },
+    {
+      "timestamp": "2026-10-16T18:50:45.522677+00:00",
+      "tool": "read_email",
+      "arguments": {
+        "email_id": "1a145aafe3f0a24e"
+      },
+      "decision": "ALLOW",
+      "reason": "Action permitted by task policy",
+      "executed": true
+    },
+    {
+      "timestamp": "2026-10-16T18:50:46.159695+00:00",
+      "tool": "read_email",
+      "arguments": {
+        "email_id": "1a1460496f1fc028"
+      },
+      "decision": "ALLOW",
+      "reason": "Action permitted by task policy",
+      "executed": true
+    }
+  ],
+  "outbox": [],
+  "policy": {
+    "allowed_tools": [
+      "read_email"
+    ],
+    "allowed_documents": [
+      "project_report"
+    ],
+    "allowed_recipients": [],
+    "max_emails": 0,
+    "required_subject": null
+  }
+}

@@ -20,7 +20,7 @@ class RunTaskRequest(BaseModel):
     allowed_recipients: Optional[List[str]] = Field(default=None, max_length=50)
     max_emails: int = Field(default=1, ge=0, le=10)
     required_subject: Optional[str] = Field(default=None, max_length=200)
-    email_id: Optional[str] = Field(default=None, max_length=200)
+    email_ids: Optional[List[str]] = Field(default=None, max_length=20)
 
 
 class ApprovalDecisionRequest(BaseModel):

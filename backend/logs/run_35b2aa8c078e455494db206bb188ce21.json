@@ -1,0 +1,34 @@
+{
+  "run_id": "35b2aa8c078e455494db206bb188ce21",
+  "status": "completed",
+  "task": "summarize my past 3 mails",
+  "document": "project_report",
+  "answer": "I cannot summarize your past emails because no emails were provided and I do not have access to your email inbox. \n\nHowever, you provided the document **Project Milestone Report**. Here is a summary of that document:\n\n* **UI Design:** Completed on time.\n* **API Integration:** Delayed by 3 days due to authentication issues.\n* **Security Testing:** Delayed by 2 days due to missing test data.",
+  "error": null,
+  "pending_approval": null,
+  "approvals": [],
+  "audit": [
+    {
+      "timestamp": "2026-10-16T18:46:41.112813+00:00",
+      "tool": "read_doc",
+      "arguments": {
+        "doc_id": "project_report"
+      },
+      "decision": "ALLOW",
+      "reason": "Action permitted by task policy",
+      "executed": true
+    }
+  ],
+  "outbox": [],
+  "policy": {
+    "allowed_tools": [
+      "read_doc"
+    ],
+    "allowed_documents": [
+      "project_report"
+    ],
+    "allowed_recipients": [],
+    "max_emails": 0,
+    "required_subject": null
+  }
+}

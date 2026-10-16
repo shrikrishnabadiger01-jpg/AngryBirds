@@ -1,0 +1,23 @@
+{
+  "run_id": "0ea7630746ba48ac9a014ce239da7aaf",
+  "status": "error",
+  "task": "summarize my past 3 emails",
+  "document": "project_report",
+  "answer": null,
+  "error": "Google rejected the model API key. This project currently sends model requests to Google's Gemini API; configure a valid Gemini key or connect the intended model provider.",
+  "pending_approval": null,
+  "approvals": [],
+  "audit": [],
+  "outbox": [],
+  "policy": {
+    "allowed_tools": [
+      "read_email"
+    ],
+    "allowed_documents": [
+      "project_report"
+    ],
+    "allowed_recipients": [],
+    "max_emails": 0,
+    "required_subject": null
+  }
+}
