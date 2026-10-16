@@ -6,6 +6,7 @@ Loads settings from environment variables with secure defaults.
 import os
 import secrets
 from pathlib import Path
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 

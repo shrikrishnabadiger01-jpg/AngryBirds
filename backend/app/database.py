@@ -4,7 +4,7 @@ SQLite database for persistent server-side OAuth credentials and security audit 
 """
 
 import datetime
-from sqlalchemy import create_engine, Column, String, DateTime, Text, Integer
+from sqlalchemy import create_engine, Column, String, DateTime, Text, Integer, inspect
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from app.config import settings
@@ -45,6 +45,7 @@ class OAuthState(Base):
     state = Column(String(100), primary_key=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
     used = Column(String(5), default="false")
+    code_verifier = Column(Text, nullable=True)
 
 
 class UserCredential(Base):
@@ -71,6 +72,10 @@ class UserCredential(Base):
 def init_db():
     """Create all database tables."""
     Base.metadata.create_all(bind=engine)
+    # Add the PKCE verifier to databases created by earlier versions.
+    if "code_verifier" not in {column["name"] for column in inspect(engine).get_columns("oauth_states")}:
+        with engine.begin() as connection:
+            connection.exec_driver_sql("ALTER TABLE oauth_states ADD COLUMN code_verifier TEXT")
 
 
 def get_db():

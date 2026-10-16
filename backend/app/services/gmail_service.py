@@ -160,7 +160,7 @@ def create_oauth_flow() -> Tuple[Flow, str]:
     return flow, state
 
 
-def get_auth_url() -> Tuple[str, str]:
+def get_auth_url() -> Tuple[str, str, str]:
     """Generate the Google OAuth consent URL."""
     flow, state = create_oauth_flow()
     auth_url, _ = flow.authorization_url(
@@ -169,12 +169,13 @@ def get_auth_url() -> Tuple[str, str]:
         prompt="consent",
         state=state,
     )
-    return auth_url, state
+    return auth_url, state, flow.code_verifier
 
 
-def handle_oauth_callback(code: str, state: str) -> Dict[str, Any]:
+def handle_oauth_callback(code: str, state: str, code_verifier: str) -> Dict[str, Any]:
     """Exchange authorization code for tokens and persist server-side."""
     flow, _ = create_oauth_flow()
+    flow.code_verifier = code_verifier
     flow.fetch_token(code=code)
     creds = flow.credentials
 

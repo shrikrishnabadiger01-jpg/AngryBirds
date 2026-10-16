@@ -34,10 +34,15 @@ async def start_oauth(db: Session = Depends(get_db)):
         )
 
     try:
-        auth_url, state = gmail_service.get_auth_url()
+        auth_url, state, code_verifier = gmail_service.get_auth_url()
 
         # Save CSRF state with 10-minute validity
-        db_state = OAuthState(state=state, created_at=datetime.datetime.utcnow(), used="false")
+        db_state = OAuthState(
+            state=state,
+            created_at=datetime.datetime.utcnow(),
+            used="false",
+            code_verifier=code_verifier,
+        )
         db.add(db_state)
         db.commit()
 
@@ -89,7 +94,11 @@ async def oauth_callback(
     db.commit()
 
     try:
-        result = gmail_service.handle_oauth_callback(code=code, state=state)
+        result = gmail_service.handle_oauth_callback(
+            code=code,
+            state=state,
+            code_verifier=db_state.code_verifier or "",
+        )
         user_email = result.get("email", "")
         return RedirectResponse(
             url=f"{settings.frontend_url}?gmail=connected&email={user_email}"
