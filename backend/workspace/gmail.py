@@ -6,7 +6,8 @@ from datetime import datetime, timezone
 from app.services import gmail_service
 from workspace.simulated import SimWorkspace
 
-GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
+GMAIL_SEND_SCOPE = ("https://www.googleapis.com/auth/gmail.readonly",
+                    "https://www.googleapis.com/auth/gmail.send")
 
 
 class GmailWorkspace(SimWorkspace):
