@@ -1,0 +1,231 @@
+import json
+import traceback
+from pathlib import Path
+
+import streamlit as st
+
+from agent.runner import run_agent
+from core.inspector import inspect_content
+from core.security import TaskPolicy
+from workspace.simulated import SimWorkspace
+
+
+st.set_page_config(page_title="AI Agent Security", layout="wide")
+st.title("AI Agent Security")
+st.markdown("Control what your agent can access and execute.")
+st.caption("Genesis 2.0 | Team Angry Birds | Simulated workspace")
+
+root = Path(__file__).resolve().parent
+documents = json.loads(
+    (root / "data" / "documents.json").read_text(encoding="utf-8-sig")
+)
+
+
+with st.sidebar:
+    st.markdown("### GENESIS 2.0")
+    st.caption("Team Angry Birds · EVA 03 / PS 1")
+    st.info("Simulated workspace. No real emails are sent.")
+    st.markdown("**Security boundary**")
+    st.caption("Permissions are fixed before the agent reads external content. Every proposed tool call passes through the backend gate.")
+
+run_tab, audit_tab, evaluation_tab = st.tabs([
+    "Run agent", "Security audit", "Evaluation"
+])
+with run_tab:
+    st.subheader("Task and permissions")
+    document_id = st.selectbox(
+        "Select a document",
+        [doc_id for doc_id in documents if doc_id != "confidential_budget"],
+    )
+
+    task = st.text_area(
+        "Your task",
+        value="Summarize the delayed milestones and their reasons.",
+    )
+
+    allow_email = st.checkbox(
+        "Allow simulated email to manager@example.com",
+        value=False,
+    )
+
+    policy = TaskPolicy(
+        allowed_tools=frozenset(
+            {"read_doc", "send_email"} if allow_email else {"read_doc"}
+        ),
+        allowed_documents=frozenset({document_id}),
+        allowed_recipients=frozenset(
+            {"manager@example.com"} if allow_email else set()
+        ),
+    )
+
+    policy_snapshot = {
+        "allowed_tools": sorted(policy.allowed_tools),
+        "allowed_documents": sorted(policy.allowed_documents),
+        "allowed_recipients": sorted(policy.allowed_recipients),
+    }
+
+    st.info(
+        "Read access: selected document only. "
+        + (
+            "Simulated email permitted only to manager@example.com."
+            if allow_email else "Email sending is blocked."
+        )
+    )
+
+    if st.button("Run agent", type="primary"):
+        if not task.strip():
+            st.warning("Enter a task first.")
+        else:
+            workspace = SimWorkspace()
+            answer = None
+            error = None
+
+            try:
+                with st.spinner("Waiting for Gemini and checking tool requests..."):
+                    answer = run_agent(task, document_id, policy, workspace)
+            except Exception as exc:
+                traceback.print_exc()
+                error = f"{type(exc).__name__}: {exc}"
+                from dotenv import dotenv_values
+                key = dotenv_values(root / ".env").get("GEMINI_API_KEY")
+                if key:
+                    error = error.replace(key, "[REDACTED]")
+
+            st.session_state["last_run"] = {
+                "document": document_id,
+                "task": task,
+                "policy": policy_snapshot,
+                "answer": answer,
+                "error": error,
+                "audit": workspace.audit,
+                "outbox": workspace.outbox,
+            }
+
+    run = st.session_state.get("last_run")
+    if run:
+        st.divider()
+        st.subheader("Last agent run")
+        st.caption(f"Document used: {run['document']}")
+        st.write("Task:", run["task"])
+
+        if (
+            run["document"] != document_id
+            or run["task"] != task
+            or run.get("policy") != policy_snapshot
+        ):
+            st.warning(
+                "Inputs have changed. The results below belong to the previous run."
+            )
+
+        if run["error"]:
+            st.error("Run failed or ended before completion.")
+            with st.expander("Error details"):
+                st.code(run["error"], language="text")
+
+        if run["answer"]:
+            st.markdown(run["answer"])
+
+        allowed = sum(e["decision"] == "ALLOW" for e in run["audit"])
+        blocked = sum(e["decision"] == "BLOCK" for e in run["audit"])
+
+        a, b, c = st.columns(3)
+        a.metric("Allowed calls", allowed)
+        b.metric("Blocked calls", blocked)
+        c.metric("Simulated emails", len(run["outbox"]))
+
+    # SAVED_RUN_LOGS_V1
+    if st.session_state.get("last_run"):
+        from datetime import datetime, timezone
+        from uuid import uuid4
+
+        saved_run = st.session_state["last_run"]
+
+        if "run_id" not in saved_run:
+            saved_run["run_id"] = uuid4().hex
+            saved_run["recorded_at"] = datetime.now(timezone.utc).isoformat()
+            saved_run["run_type"] = "live_agent"
+            saved_run["status"] = (
+                "error" if saved_run["error"] else "completed"
+            )
+            # Policy was captured when the run started.
+
+        log_text = json.dumps(saved_run, indent=2, ensure_ascii=False)
+        log_name = saved_run["run_id"] + ".json"
+
+        st.divider()
+        st.subheader("Run evidence")
+
+        if not st.session_state.get("saved_" + saved_run["run_id"]):
+            try:
+                log_dir = root / "logs"
+                log_dir.mkdir(exist_ok=True)
+                (log_dir / log_name).write_text(log_text, encoding="utf-8")
+                st.session_state["saved_" + saved_run["run_id"]] = True
+            except OSError as exc:
+                st.error(f"Could not save the run log: {exc}")
+
+        if st.session_state.get("saved_" + saved_run["run_id"]):
+            st.success("Run log saved.")
+            st.caption(f"File: logs/{log_name}")
+
+        st.download_button(
+            "Download this run as JSON",
+            data=log_text,
+            file_name=log_name,
+            mime="application/json",
+        )
+
+
+
+with audit_tab:
+    with st.expander("Document inspection", expanded=True):
+        st.caption(
+            "Heuristic warnings for the operator. These signals can miss "
+            "attacks or flag harmless text; they do not grant permissions "
+            "or automatically block document reads."
+        )
+
+        content = documents[document_id]["content"]
+        findings = inspect_content(content)
+
+        if findings:
+            st.warning(f"{len(findings)} suspicious instruction signals found.")
+            st.dataframe(findings, use_container_width=True, hide_index=True)
+        else:
+            st.info("No configured patterns matched. This is not a safety guarantee.")
+
+        st.text(content)
+
+    run = st.session_state.get("last_run")
+    if run:
+        st.caption("Audit for: " + run["document"] + " | " + run["task"])
+        if run["document"] != document_id or run["task"] != task or run.get("policy") != policy_snapshot:
+            st.warning("Audit belongs to previous inputs. Run the agent again to update it.")
+        st.subheader("Agent tool audit")
+        if run["audit"]:
+            rows = [
+                {
+                    "Tool": e["tool"],
+                    "Arguments": json.dumps(e["arguments"]),
+                    "Decision": e["decision"],
+                    "Reason": e["reason"],
+                    "Executed": e["executed"],
+                }
+                for e in run["audit"]
+            ]
+            st.dataframe(rows, use_container_width=True, hide_index=True)
+        else:
+            st.info("No tool calls recorded.")
+
+        with st.expander("Simulated outbox"):
+            st.json(run["outbox"])
+
+    else:
+        st.info("Run the agent to see its tool decisions here.")
+
+with evaluation_tab:
+    from evaluation_view import render_saved_results
+    from comparison import render_comparison
+    render_saved_results(root)
+    st.info("Scripted tests are available in the sidebar. They do not use Gemini and are separate from the live comparisons below.")
+    render_comparison(root, task, document_id, policy)

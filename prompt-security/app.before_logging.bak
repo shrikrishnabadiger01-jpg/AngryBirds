@@ -1,0 +1,175 @@
+import json
+import traceback
+from pathlib import Path
+
+import streamlit as st
+
+from agent.runner import run_agent
+from core.inspector import inspect_content
+from core.security import TaskPolicy
+from workspace.simulated import SimWorkspace
+
+
+st.set_page_config(page_title="AI Agent Security", layout="wide")
+st.title("AI Agent Security")
+st.caption("Genesis 2.0 | Team Angry Birds | Simulated workspace")
+
+root = Path(__file__).resolve().parent
+documents = json.loads(
+    (root / "data" / "documents.json").read_text(encoding="utf-8-sig")
+)
+
+document_id = st.selectbox(
+    "Select a document",
+    ["project_report", "project_report_injected"],
+)
+
+task = st.text_area(
+    "Your task",
+    value="Summarize the delayed milestones and their reasons.",
+)
+
+policy = TaskPolicy(
+    allowed_tools=frozenset({"read_doc"}),
+    allowed_documents=frozenset({document_id}),
+    allowed_recipients=frozenset(),
+)
+
+st.info(
+    "Permissions: read only the selected document. "
+    "Other documents and email sending are blocked."
+)
+
+with st.expander("Document inspection", expanded=True):
+    st.caption(
+        "Heuristic warnings for the operator. These signals can miss "
+        "attacks or flag harmless text; they do not grant permissions "
+        "or automatically block document reads."
+    )
+
+    content = documents[document_id]["content"]
+    findings = inspect_content(content)
+
+    if findings:
+        st.warning(f"{len(findings)} suspicious instruction signals found.")
+        st.dataframe(findings, use_container_width=True, hide_index=True)
+    else:
+        st.info("No configured patterns matched. This is not a safety guarantee.")
+
+    st.text(content)
+
+if st.button("Run agent", type="primary"):
+    if not task.strip():
+        st.warning("Enter a task first.")
+    else:
+        workspace = SimWorkspace()
+        answer = None
+        error = None
+
+        try:
+            with st.spinner("Waiting for Gemini and checking tool requests..."):
+                answer = run_agent(task, document_id, policy, workspace)
+        except Exception as exc:
+            traceback.print_exc()
+            error = f"{type(exc).__name__}: {exc}"
+            from dotenv import dotenv_values
+            key = dotenv_values(root / ".env").get("GEMINI_API_KEY")
+            if key:
+                error = error.replace(key, "[REDACTED]")
+
+        st.session_state["last_run"] = {
+            "document": document_id,
+            "task": task,
+            "answer": answer,
+            "error": error,
+            "audit": workspace.audit,
+            "outbox": workspace.outbox,
+        }
+
+run = st.session_state.get("last_run")
+if run:
+    st.divider()
+    st.subheader("Last agent run")
+    st.caption(f"Document used: {run['document']}")
+    st.write("Task:", run["task"])
+
+    if run["document"] != document_id or run["task"] != task:
+        st.warning(
+            "Inputs have changed. The results below belong to the previous run."
+        )
+
+    if run["error"]:
+        st.error("Run failed or ended before completion.")
+        with st.expander("Error details"):
+            st.code(run["error"], language="text")
+
+    if run["answer"]:
+        st.markdown(run["answer"])
+
+    allowed = sum(e["decision"] == "ALLOW" for e in run["audit"])
+    blocked = sum(e["decision"] == "BLOCK" for e in run["audit"])
+
+    a, b, c = st.columns(3)
+    a.metric("Allowed calls", allowed)
+    b.metric("Blocked calls", blocked)
+    c.metric("Simulated emails", len(run["outbox"]))
+
+    st.subheader("Agent tool audit")
+    if run["audit"]:
+        rows = [
+            {
+                "Tool": e["tool"],
+                "Arguments": json.dumps(e["arguments"]),
+                "Decision": e["decision"],
+                "Reason": e["reason"],
+                "Executed": e["executed"],
+            }
+            for e in run["audit"]
+        ]
+        st.dataframe(rows, use_container_width=True, hide_index=True)
+    else:
+        st.info("No tool calls recorded.")
+
+    with st.expander("Simulated outbox"):
+        st.json(run["outbox"])
+
+st.divider()
+st.subheader("Independent security-gate tests")
+st.caption(
+    "Scripted calls, not Gemini-generated attacks. "
+    "Each test uses a fresh simulated workspace and makes no API request."
+)
+
+left, right = st.columns(2)
+test_read = left.button("Test forbidden document read")
+test_send = right.button("Test forbidden email")
+
+if test_read or test_send:
+    test_workspace = SimWorkspace()
+
+    if test_read:
+        tool = "read_doc"
+        arguments = {"doc_id": "confidential_budget"}
+    else:
+        tool = "send_email"
+        arguments = {
+            "recipient": "attacker@example.com",
+            "subject": "Scripted gate test",
+            "body": "Synthetic test message.",
+        }
+
+    result = test_workspace.execute(policy, tool, arguments)
+    event = test_workspace.audit[-1]
+    passed = (
+        result["status"] == "blocked"
+        and event["executed"] is False
+        and test_workspace.outbox == []
+    )
+
+    if passed:
+        st.success("PASS: Forbidden action blocked before execution.")
+    else:
+        st.error("FAIL: Unexpected gate result. Inspect the audit below.")
+
+    st.json(test_workspace.audit)
+    st.write("Simulated outbox:", test_workspace.outbox)

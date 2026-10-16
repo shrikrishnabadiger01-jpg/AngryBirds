@@ -9,8 +9,9 @@ from agent.runner import _steps
 
 
 class ApprovalRun:
-    def __init__(self, task, document_id, policy, workspace):
-        self.run_id = uuid4().hex
+    def __init__(self, task, document_id, policy, workspace, require_approval=True):
+        self.require_approval = require_approval
+        self.run_id = workspace.run_id
         self.task = task
         self.document_id = document_id
         self.policy = policy
@@ -20,7 +21,7 @@ class ApprovalRun:
         self.error = None
         self.pending = None
         self.approvals = []
-        self._steps = _steps(task, document_id, policy, workspace, require_approval=True)
+        self._steps = _steps(task, document_id, policy, workspace, require_approval=require_approval)
 
     def _advance(self, decision=None, first=False):
         try:
