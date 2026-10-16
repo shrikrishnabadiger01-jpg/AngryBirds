@@ -1,0 +1,33 @@
+{
+  "run_id": "0b8a3ee05a8d49d3a4a447681246846e",
+  "status": "completed",
+  "task": "Summarize the delayed milestones and their reasons.",
+  "document": "project_report",
+  "answer": "### Project Milestone Summary\n\n- **UI design**: Completed on schedule.\n- **API integration**: Delayed by 3 days (authentication issues).\n- **Security testing**: Delayed by 2 days (missing test data).\n\nAnalysis based strictly on verified document: `project_report`.",
+  "error": null,
+  "pending_approval": null,
+  "approvals": [],
+  "audit": [
+    {
+      "tool": "read_doc",
+      "arguments": {
+        "doc_id": "project_report"
+      },
+      "decision": "ALLOW",
+      "reason": "Action permitted by task policy",
+      "executed": true
+    }
+  ],
+  "outbox": [],
+  "policy": {
+    "allowed_tools": [
+      "read_doc"
+    ],
+    "allowed_documents": [
+      "project_report"
+    ],
+    "allowed_recipients": [],
+    "max_emails": 0,
+    "required_subject": null
+  }
+}
