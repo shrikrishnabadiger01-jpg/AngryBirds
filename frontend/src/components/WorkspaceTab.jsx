@@ -1,62 +1,17 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { marked } from 'marked';
-import { 
-  FileText, Shield, ShieldAlert, ShieldCheck, Mail, CheckCircle2, 
-  XCircle, AlertTriangle, Download, RefreshCw, Send, ChevronDown, ChevronUp
-} from 'lucide-react';
+import { Activity, AlertTriangle, Check, ChevronDown, FileText, LockKeyhole, Mail, Play, RefreshCw, Send, ShieldAlert, ShieldCheck, X } from 'lucide-react';
+import { Decision, EmptyState } from './HomeTab';
 
 const PRESETS = [
-  {
-    id: 'legit',
-    label: 'Legitimate Task',
-    docId: 'project_report',
-    task: 'Summarize the delayed milestones and their reasons.',
-    allowEmail: false,
-    desc: 'Normal summarization without email permission.'
-  },
-  {
-    id: 'injected_attack',
-    label: 'Confidential Budget Injection Attack',
-    docId: 'project_report_injected',
-    task: 'Summarize the delayed milestones and their reasons.',
-    allowEmail: false,
-    desc: 'Document instructs agent to steal confidential budget and send to attacker.'
-  },
-  {
-    id: 'redirect_attack',
-    label: 'Recipient Redirection Attack',
-    docId: 'report_recipient_redirect',
-    task: 'Summarize delayed milestones and email the manager with the report.',
-    allowEmail: true,
-    desc: 'Document claims manager mailbox is obsolete and redirects email to attacker.'
-  },
-  {
-    id: 'approval_flow',
-    label: 'Authorized Email with Human Approval',
-    docId: 'project_report',
-    task: 'Summarize delayed milestones and send an update email to the manager.',
-    allowEmail: true,
-    desc: 'Authorized email triggers Human-in-the-Loop review before execution.'
-  },
-  {
-    id: 'training_quote',
-    label: 'Harmless Training Note',
-    docId: 'report_training_quote',
-    task: 'Summarize the document key points.',
-    allowEmail: false,
-    desc: 'Contains harmless security quotation ("Ignore previous instructions").'
-  }
+  { label: 'Summarize project update', docId: 'project_report', task: 'Summarize the delayed milestones and their reasons.', email: false },
+  { label: 'Inspect a prompt injection', docId: 'project_report_injected', task: 'Summarize the delayed milestones and their reasons.', email: false },
+  { label: 'Review recipient redirection', docId: 'report_recipient_redirect', task: 'Summarize delayed milestones and email the manager with the report.', email: true },
+  { label: 'Prepare an approved update', docId: 'project_report', task: 'Summarize delayed milestones and send an update email to the manager.', email: true },
+  { label: 'Read a harmless security note', docId: 'report_training_quote', task: 'Summarize the document key points.', email: false },
 ];
 
-export default function WorkspaceTab({
-  documents = [],
-  currentRun,
-  isRunning,
-  onStartRun,
-  onApproveProposal,
-  onCancelRun,
-  canOperate = true,
-}) {
+export default function WorkspaceTab({ documents = [], currentRun, isRunning, onStartRun, onApproveProposal, canOperate = true, gmailStatus, focusDocumentId }) {
   const [selectedDocId, setSelectedDocId] = useState('project_report');
   const [taskText, setTaskText] = useState('Summarize the delayed milestones and their reasons.');
   const [allowEmail, setAllowEmail] = useState(false);
@@ -64,583 +19,92 @@ export default function WorkspaceTab({
   const [allowedDocuments, setAllowedDocuments] = useState(['project_report']);
   const [maxEmails, setMaxEmails] = useState(1);
   const [requiredSubject, setRequiredSubject] = useState('');
-  const [showDocInspector, setShowDocInspector] = useState(false);
-  const [showAuditLogs, setShowAuditLogs] = useState(true);
+  const docs = documents.filter(doc => !doc.is_confidential);
+  const selectedDoc = docs.find(doc => doc.id === selectedDocId) || docs[0];
+  useEffect(() => { if (focusDocumentId && docs.some(doc => doc.id === focusDocumentId)) setSelectedDocId(focusDocumentId); }, [focusDocumentId, documents]);
+  useEffect(() => { if (selectedDocId && !allowedDocuments.includes(selectedDocId)) setAllowedDocuments(current => [...current, selectedDocId]); }, [selectedDocId]);
 
-  const docsList = documents || [];
-  const selectedDoc = docsList.find(d => d.id === selectedDocId) || docsList[0] || null;
+  const events = currentRun?.audit || [];
+  const lastDecision = events.length ? events[events.length - 1] : null;
+  const proposal = currentRun?.pending_approval?.proposal || currentRun?.outbox?.[currentRun.outbox.length - 1] || null;
+  const hasRead = events.some(event => event.tool === 'read_doc');
+  const steps = useMemo(() => {
+    const pending = currentRun?.status === 'awaiting_approval';
+    const sent = (currentRun?.outbox || []).length > 0;
+    const started = Boolean(currentRun);
+    return [
+      ['Parse user request', 'Identify the requested outcome and authorized actions', started ? 'done' : 'idle'],
+      ['Retrieve relevant data', hasRead ? `Read ${selectedDoc?.title || 'selected document'}` : 'Waits for an agent run', hasRead ? 'done' : 'idle'],
+      ['Inspect untrusted content', hasRead ? 'Inspection runs before document content is used' : 'Content is not read until the task starts', hasRead ? 'done' : 'idle'],
+      ['Check permissions and intent', lastDecision ? `${lastDecision.decision}: ${lastDecision.reason}` : 'Policy is fixed before external content is read', lastDecision ? 'done' : started ? 'done' : 'idle'],
+      ['Prepare requested action', proposal ? `Proposal for ${proposal.recipient || 'recipient not recorded'}` : currentRun?.answer ? 'No email action was proposed' : 'No action prepared yet', proposal || currentRun?.answer ? 'done' : 'idle'],
+      ['Human confirmation', pending ? 'Review and approve or deny the exact proposal' : allowEmail ? 'Required before a simulated email is added to the outbox' : 'No email permission granted', pending ? 'review' : sent ? 'done' : 'idle'],
+      ['Execute if authorized', sent ? 'Added to simulated outbox; no real email sent' : pending ? 'Waiting for your decision' : currentRun?.status === 'completed' ? 'Run completed' : 'No action executed', sent || currentRun?.status === 'completed' ? 'done' : pending ? 'idle' : 'idle'],
+    ];
+  }, [currentRun, events, hasRead, selectedDoc, lastDecision, proposal, allowEmail]);
 
-  const handleApplyPreset = (preset) => {
-    setSelectedDocId(preset.docId);
-    setTaskText(preset.task);
-    setAllowEmail(preset.allowEmail);
-    setAllowedDocuments([preset.docId]);
+  const submit = event => {
+    event.preventDefault();
+    if (!taskText.trim() || !selectedDoc || isRunning || !canOperate) return;
+    onStartRun({ task: taskText.trim(), document_id: selectedDocId, allow_email: allowEmail, allowed_documents: [...new Set([selectedDocId, ...allowedDocuments])], allowed_recipients: recipientAllowlist.split(/[\n,;]/).map(value => value.trim()).filter(Boolean), max_emails: Number(maxEmails), required_subject: requiredSubject.trim() || null });
   };
+  const applyPreset = preset => { setSelectedDocId(preset.docId); setTaskText(preset.task); setAllowEmail(preset.email); setAllowedDocuments([preset.docId]); };
+  const downloadRun = () => { if (!currentRun) return; const blob = new Blob([JSON.stringify(currentRun, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `agent_run_${currentRun.run_id || 'result'}.json`; anchor.click(); URL.revokeObjectURL(url); };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!taskText.trim() || isRunning) return;
-    onStartRun({
-      task: taskText.trim(),
-      document_id: selectedDocId,
-      allow_email: allowEmail,
-      allowed_documents: [...new Set([selectedDocId, ...allowedDocuments])],
-      allowed_recipients: recipientAllowlist.split(/[\n,;]/).map(value => value.trim()).filter(Boolean),
-      max_emails: Number(maxEmails),
-      required_subject: requiredSubject.trim() || null,
-    });
-  };
+  return <div className="page-shell workspace-page">
+    <div className="page-heading workspace-heading"><div><div className="eyebrow">AI Guard / Agent workspace</div><h1>Give your agent a task</h1><p>It will read only the permitted sources, inspect their content, and pause before sensitive actions.</p></div><span className="simulation-note"><ShieldCheck size={14}/> Agent emails are simulated</span></div>
 
-  const downloadRunJson = () => {
-    if (!currentRun) return;
-    const blob = new Blob([JSON.stringify(currentRun, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `agent_run_${currentRun.run_id || 'result'}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+    <div className="workspace-layout">
+      <aside className="workspace-left">
+        <section className="surface-card compact-card"><div className="section-heading"><div><div className="eyebrow">Available tools</div><h2>Data access</h2></div><span className="subtle-count">{docs.length}</span></div>
+          <div className="tool-list"><div className="tool-row"><span className="source-icon doc-icon"><FileText size={16}/></span><span><strong>Workspace documents</strong><small>{docs.length} available to runs</small></span><i className="state-dot is-good"/></div><div className="tool-row"><span className="source-icon gmail-icon"><Mail size={16}/></span><span><strong>Gmail scanner</strong><small>{gmailStatus?.connected ? 'Separate read-only inbox scan' : 'Not connected'}</small></span><i className={`state-dot ${gmailStatus?.connected ? 'is-good' : 'is-neutral'}`}/></div></div>
+        </section>
+        <section className="surface-card compact-card"><div className="eyebrow">Document scope</div><h2>Allowed documents</h2><label className="field-label" htmlFor="workspace-document">Selected document</label><select id="workspace-document" className="field-control" value={selectedDocId} onChange={e => setSelectedDocId(e.target.value)}>{docs.map(doc => <option key={doc.id} value={doc.id}>{doc.title}</option>)}</select>
+          <div className="scope-checks">{docs.filter(doc => doc.id !== selectedDocId).map(doc => <label key={doc.id}><input type="checkbox" checked={allowedDocuments.includes(doc.id)} onChange={e => setAllowedDocuments(list => e.target.checked ? [...new Set([...list, doc.id])] : list.filter(id => id !== doc.id))}/><span>{doc.title}</span></label>)}</div>
+          <details className="preset-menu"><summary>Load a security scenario <ChevronDown size={14}/></summary><div>{PRESETS.map(preset => <button type="button" key={preset.label} onClick={() => applyPreset(preset)}>{preset.label}</button>)}</div></details>
+        </section>
+      </aside>
 
-  const renderMarkdown = (text) => {
-    if (!text) return null;
-    try {
-      const html = marked.parse(text, { breaks: true, gfm: true });
-      return <div className="markdown-answer" dangerouslySetInnerHTML={{ __html: html }} />;
-    } catch (e) {
-      return <div className="markdown-answer whitespace-pre-wrap">{text}</div>;
-    }
-  };
+      <section className="workspace-center">
+        <form className="surface-card task-composer" onSubmit={submit}><label className="field-label" htmlFor="agent-task">What should the agent do?</label><div className="composer-row"><textarea id="agent-task" value={taskText} onChange={e => setTaskText(e.target.value)} rows={3} placeholder="Find the latest project update and draft an email to the manager…" required/><button type="submit" className="button-primary run-button" disabled={!canOperate || isRunning || !taskText.trim() || !selectedDoc}>{isRunning ? <RefreshCw size={16} className="spin"/> : <Play size={16}/>}<span>{isRunning ? 'Running' : canOperate ? 'Run task' : 'Operator access required'}</span></button></div>
+          <div className="composer-foot"><span><LockKeyhole size={13}/> Policy is set before reading external content</span><span>{selectedDoc?.title || 'No document selected'}</span></div>
+        </form>
 
-  return (
-    <div className="main-content">
-      {/* Hero Banner */}
-      <div className="hero-banner">
-        <h1 className="hero-title">Give your agent a task.</h1>
-        <p className="hero-subtitle">
-          Agent runs use simulated documents and a simulated outbox. They never send real email; the Gmail tab reads a real inbox with read-only access.
-        </p>
-      </div>
+        <section className="surface-card execution-card"><div className="section-heading"><div><div className="eyebrow">Execution flow</div><h2>Agent activity</h2></div><div className="run-status"><i className={`state-dot ${isRunning ? 'is-warn' : currentRun ? 'is-good' : 'is-neutral'}`}/>{isRunning ? 'In progress' : currentRun?.status || 'Ready'}</div></div>
+          <ol className="execution-timeline">{steps.map(([title, detail, state], index) => <li key={title} className={`timeline-step step-${state}`}><span className="step-marker">{state === 'done' ? <Check size={14}/> : state === 'review' ? <AlertTriangle size={14}/> : <span>{index + 1}</span>}</span><div className="step-copy"><strong>{title}</strong><small>{detail}</small></div><span className="step-state">{state === 'done' ? 'Complete' : state === 'review' ? 'Review required' : currentRun ? 'Pending' : 'Not started'}</span></li>)}</ol>
+        </section>
 
-      {/* Main 2-Column Responsive Workspace Grid */}
-      <div className="workspace-grid">
-        {/* Left Column: Configure Task & Policy */}
-        <div className="panel-stack">
-          {/* Quick Presets Panel */}
-          <div className="glass-panel">
-            <div className="panel-header">
-              <span className="panel-title">
-                <Shield size={16} color="#10b981" />
-                Quick Test Scenarios
-              </span>
-            </div>
-            <div className="scenarios-grid">
-              {PRESETS.map((preset) => {
-                const isActive = selectedDocId === preset.docId && taskText === preset.task;
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => handleApplyPreset(preset)}
-                    className={`scenario-card ${isActive ? 'active' : ''}`}
-                  >
-                    <span className="scenario-title">{preset.label}</span>
-                    <span className="scenario-doc-tag">{preset.docId}</span>
-                    <p className="scenario-desc">{preset.desc}</p>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+        <section className="surface-card result-card"><div className="section-heading"><div><div className="eyebrow">Agent response</div><h2>Task result</h2></div>{currentRun && <div className="button-row"><Decision value={currentRun.status}/><button className="button-quiet" onClick={downloadRun} type="button">Export JSON</button></div>}</div>
+          {currentRun?.error && <div className="inline-error">{currentRun.error}</div>}
+          {currentRun?.answer ? <SafeMarkdown text={currentRun.answer}/> : currentRun?.status === 'awaiting_approval' ? <div className="inline-notice"><ShieldAlert size={16}/> The agent paused because the proposed email requires your approval.</div> : currentRun ? <p className="muted-copy">The run did not return a summary.</p> : <EmptyState title="Ready for a task" detail="Choose a permitted document, write a request, and run the agent."/>}
+          {currentRun?.audit?.length > 0 && <details className="run-audit"><summary>Runtime decisions · {currentRun.audit.length}<ChevronDown size={14}/></summary><div className="table-scroll"><table className="data-table"><thead><tr><th>Decision</th><th>Action</th><th>Reason</th><th>Executed</th></tr></thead><tbody>{currentRun.audit.map((event, i) => <tr key={i}><td><Decision value={event.decision}/></td><td><code>{event.tool}</code></td><td>{event.reason}</td><td>{event.executed ? 'Yes' : 'No'}</td></tr>)}</tbody></table></div></details>}
+          {currentRun?.outbox?.length > 0 && <div className="outbox-notice"><Check size={15}/><span>{currentRun.outbox.length} email action(s) added to the simulated outbox. No real email was sent.</span></div>}
+        </section>
+      </section>
 
-          {/* Configuration Form Panel */}
-          <form onSubmit={handleSubmit} className="glass-panel">
-            <div className="panel-header">
-              <span className="panel-title">
-                <FileText size={16} color="#10b981" />
-                Configure Task & Policy
-              </span>
-            </div>
+      <aside className="workspace-right">
+        <section className="surface-card compact-card"><div className="section-heading"><div><div className="eyebrow">Current task</div><h2>Task options</h2></div><Activity size={17}/></div><p className="task-summary">{taskText || 'No task entered yet.'}</p><div className="policy-switch"><label><input type="checkbox" checked={allowEmail} onChange={e => setAllowEmail(e.target.checked)}/><span>Allow simulated email</span></label><small>Requires recipient allowlist and human confirmation</small></div>{allowEmail && <div className="policy-fields"><label className="field-label" htmlFor="allowed-recipients">Allowed recipients</label><textarea id="allowed-recipients" className="field-control" rows={2} value={recipientAllowlist} onChange={e => setRecipientAllowlist(e.target.value)} placeholder="name@example.com"/><label className="field-label" htmlFor="email-cap">Email limit</label><input id="email-cap" className="field-control" type="number" min="0" max="10" value={maxEmails} onChange={e => setMaxEmails(e.target.value)}/><label className="field-label" htmlFor="subject-rule">Required subject</label><input id="subject-rule" className="field-control" maxLength="200" value={requiredSubject} onChange={e => setRequiredSubject(e.target.value)} placeholder="Optional exact subject"/></div>}</section>
 
-            {/* Target Document */}
-            <div className="form-group">
-              <label className="form-label">Target Document</label>
-              <select
-                value={selectedDocId}
-                onChange={(e) => setSelectedDocId(e.target.value)}
-                className="form-select"
-              >
-                {docsList.filter(d => !d.is_confidential).map((doc) => (
-                  <option key={doc.id} value={doc.id}>
-                    {doc.title} ({doc.id})
-                  </option>
-                ))}
-              </select>
+        <section className="surface-card compact-card security-check"><div className="section-heading"><div><div className="eyebrow">Security check</div><h2>{selectedDoc?.findings_count ? 'Review signals' : 'Document inspection'}</h2></div>{selectedDoc?.findings_count ? <AlertTriangle size={17}/> : <ShieldCheck size={17}/>}</div>{lastDecision ? <div className="decision-summary"><Decision value={lastDecision.decision}/><p>{lastDecision.reason}</p></div> : <p className="muted-copy">{selectedDoc?.findings_count ? `${selectedDoc.findings_count} pattern signal(s) found in ${selectedDoc.title}.` : 'No saved action decision for this task yet.'}</p>}{selectedDoc?.findings?.length > 0 && <details className="evidence-details"><summary>Matched evidence ({selectedDoc.findings.length})</summary>{selectedDoc.findings.map((finding, i) => <p key={i}><strong>{finding.signal}</strong><code>{finding.matched_text}</code></p>)}</details>}</section>
 
-              {/* Signals Alert */}
-              {selectedDoc?.findings_count > 0 && (
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '10px',
-                  padding: '12px 14px',
-                  background: 'rgba(245, 158, 11, 0.12)',
-                  border: '1px solid rgba(245, 158, 11, 0.3)',
-                  borderRadius: '10px',
-                  marginTop: '10px',
-                }}>
-                  <AlertTriangle size={17} color="#fbbf24" style={{ flexShrink: 0, marginTop: 1 }} />
-                  <div>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#fef3c7' }}>
-                      {selectedDoc.findings_count} Suspicious Signal(s) Detected in Document
-                    </span>
-                    <p style={{ fontSize: '11px', color: '#fde68a', marginTop: '2px', lineHeight: 1.4 }}>
-                      Document contains embedded attack directives. Runtime permission gate is armed.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Task Prompt */}
-            <div className="form-group">
-              <label className="form-label">Agent Task Prompt</label>
-              <textarea
-                value={taskText}
-                onChange={(e) => setTaskText(e.target.value)}
-                rows={4}
-                className="form-textarea"
-                placeholder="Enter prompt for the agent..."
-                required
-              />
-            </div>
-
-            {/* Fixed Permissions */}
-            <div className="form-group" style={{ paddingTop: '10px', borderTop: '1px solid var(--border-subtle)' }}>
-              <label className="form-label" style={{ color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Task Permissions
-              </label>
-
-              {/* Read Doc (Mandatory) */}
-              <div className="permission-box disabled">
-                <input
-                  type="checkbox"
-                  checked={true}
-                  disabled={true}
-                  className="custom-checkbox"
-                />
-                <div>
-                  <div className="permission-title">Read selected document</div>
-                  <div className="permission-desc">
-                    Selected document is always in scope. Add other non-confidential documents below.
-                  </div>
-                </div>
-              </div>
-
-              <div className="permission-box" style={{ display: 'block' }}>
-                <div className="permission-title">Additional allowed documents</div>
-                <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
-                  {docsList.filter(doc => !doc.is_confidential && doc.id !== selectedDocId).map(doc => (
-                    <label key={doc.id} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12 }}>
-                      <input type="checkbox" checked={allowedDocuments.includes(doc.id)} onChange={(event) => setAllowedDocuments(current => event.target.checked ? [...new Set([...current, doc.id])] : current.filter(id => id !== doc.id))} />
-                      {doc.title} ({doc.id})
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Email Send Permission */}
-              <label className="permission-box" style={{ cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={allowEmail}
-                  onChange={(e) => setAllowEmail(e.target.checked)}
-                  className="custom-checkbox"
-                />
-                <div style={{ flex: 1 }}>
-                  <div className="permission-title">Send simulated email to manager</div>
-                  <div className="permission-desc">
-                    Only addresses in the allowlist are permitted. Sending requires human approval.
-                  </div>
-                  {allowEmail && (
-                    <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--border-subtle)' }}>
-                      <label className="form-label" style={{ marginTop: 8 }}>Allowed recipient addresses (comma or newline separated)</label>
-                      <textarea value={recipientAllowlist} onChange={(e) => setRecipientAllowlist(e.target.value)} rows={2} className="form-textarea" aria-label="Allowed recipient addresses" />
-                      <label className="form-label" style={{ marginTop: 8 }}>Maximum emails this run</label>
-                      <input type="number" min="0" max="10" value={maxEmails} onChange={(e) => setMaxEmails(e.target.value)} className="form-input" />
-                      <label className="form-label" style={{ marginTop: 8 }}>Required subject (optional)</label>
-                      <input type="text" maxLength="200" value={requiredSubject} onChange={(e) => setRequiredSubject(e.target.value)} className="form-input" placeholder="Exact subject required by policy" />
-                    </div>
-                  )}
-                </div>
-              </label>
-            </div>
-
-            {/* Action Button */}
-            <button
-              type="submit"
-              disabled={!canOperate || isRunning || !taskText.trim()}
-              className="btn-run-agent"
-            >
-              {isRunning ? (
-                <>
-                  <RefreshCw size={16} className="animate-spin" />
-                  Running Agent & Verifying Policy...
-                </>
-              ) : (
-                <>
-                  <Send size={16} />
-                  {canOperate ? 'Run Agent' : 'Operator role required'}
-                </>
-              )}
-            </button>
-          </form>
-        </div>
-
-        {/* Right Column: Execution Results & Audits */}
-        <div className="panel-stack">
-          {/* Human-in-the-Loop Pending Approval Alert */}
-          {currentRun?.status === 'awaiting_approval' && currentRun.pending_approval && (
-            <div className="approval-alert-card">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#fbbf24' }}>
-                  <ShieldAlert size={20} />
-                  <h3 style={{ fontSize: '14px', fontWeight: 800, letterSpacing: '0.04em', color: '#ffffff' }}>
-                    HUMAN APPROVAL REQUIRED
-                  </h3>
-                </div>
-                <span className="badge badge-awaiting">AWAITING DECISION</span>
-              </div>
-
-              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                The agent proposes sending an email. Under Human-in-the-Loop policy, you must review the immutable proposal before it executes.
-              </p>
-
-              {/* Proposal Preview Box */}
-              <div className="proposal-preview-box">
-                <div style={{ marginBottom: 6 }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Recipient: </span>
-                  <span style={{ color: '#34d399', fontWeight: 700 }}>
-                    {currentRun.pending_approval.proposal?.recipient}
-                  </span>
-                </div>
-                <div style={{ marginBottom: 6 }}>
-                  <span style={{ color: 'var(--text-muted)' }}>Subject: </span>
-                  <span style={{ color: '#ffffff' }}>
-                    {currentRun.pending_approval.proposal?.subject}
-                  </span>
-                </div>
-                <div style={{ paddingTop: 8, borderTop: '1px solid var(--border-subtle)', marginTop: 8 }}>
-                  <span style={{ color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Body:</span>
-                  <div style={{ color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', fontFamily: 'var(--font-sans)', fontSize: '12px' }}>
-                    {currentRun.pending_approval.proposal?.body}
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="approval-btn-group">
-                <button
-                  type="button"
-                  onClick={() => onApproveProposal(currentRun.run_id, currentRun.pending_approval.token, false)}
-                  className="btn-deny"
-                >
-                  <XCircle size={15} />
-                  Deny Email
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onApproveProposal(currentRun.run_id, currentRun.pending_approval.token, true)}
-                  className="btn-approve"
-                >
-                  <CheckCircle2 size={15} />
-                  Approve (Execute Once)
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Execution Result Card */}
-          <div className="glass-panel">
-            <div className="panel-header">
-              <span className="panel-title">
-                <CheckCircle2 size={16} color="#10b981" />
-                Execution Result
-              </span>
-
-              {currentRun && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span className={`badge ${
-                    currentRun.status === 'completed' ? 'badge-completed' :
-                    currentRun.status === 'awaiting_approval' ? 'badge-awaiting' : 'badge-error'
-                  }`}>
-                    {currentRun.status}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={downloadRunJson}
-                    title="Download run JSON"
-                    style={{
-                      background: 'rgba(6, 18, 14, 0.7)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: '8px',
-                      padding: '5px 8px',
-                      color: 'var(--text-secondary)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      fontSize: '11px',
-                    }}
-                  >
-                    <Download size={13} />
-                    <span>JSON</span>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {!currentRun ? (
-              <div style={{
-                textAlign: 'center',
-                padding: '44px 20px',
-                border: '1px dashed var(--border-subtle)',
-                borderRadius: '12px',
-                background: 'rgba(4, 12, 10, 0.4)',
-              }}>
-                <Shield size={36} color="var(--text-muted)" style={{ margin: '0 auto 12px auto', opacity: 0.5 }} />
-                <p style={{ fontSize: '14px', fontWeight: 600, color: '#ffffff' }}>Ready when you are</p>
-                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '360px', margin: '4px auto 0 auto' }}>
-                  Choose a document and run your task. The agent’s summary, decisions, and audit trail will appear here.
-                </p>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {currentRun.error && (
-                  <div style={{
-                    padding: '12px 14px',
-                    borderRadius: '10px',
-                    background: 'rgba(244, 63, 94, 0.15)',
-                    border: '1px solid rgba(244, 63, 94, 0.35)',
-                    color: '#fb7185',
-                    fontSize: '12px',
-                  }}>
-                    <strong>Error: </strong> {currentRun.error}
-                  </div>
-                )}
-
-                {/* Markdown Formatted Answer */}
-                {currentRun.answer ? (
-                  renderMarkdown(currentRun.answer)
-                ) : currentRun.status === 'awaiting_approval' ? (
-                  <div style={{
-                    padding: '12px 14px',
-                    borderRadius: '8px',
-                    background: 'rgba(245, 158, 11, 0.1)',
-                    border: '1px solid rgba(245, 158, 11, 0.25)',
-                    fontSize: '12px',
-                    color: '#fde68a',
-                  }}>
-                    Agent paused awaiting your approval of proposed email.
-                  </div>
-                ) : isRunning ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '13px', color: '#34d399' }}>
-                    <RefreshCw size={15} className="animate-spin" />
-                    Agent is processing document and verifying runtime policies...
-                  </div>
-                ) : null}
-              </div>
-            )}
-          </div>
-
-          {/* Runtime Security Audit Table Panel */}
-          {currentRun?.audit && currentRun.audit.length > 0 && (
-            <div className="glass-panel">
-              <div className="panel-header">
-                <span className="panel-title">
-                  <ShieldCheck size={16} color="#10b981" />
-                  Runtime Security Audit ({currentRun.audit.length} events)
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setShowAuditLogs(!showAuditLogs)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-muted)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 4,
-                    fontSize: '12px',
-                  }}
-                >
-                  {showAuditLogs ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                </button>
-              </div>
-
-              {showAuditLogs && (
-                <div className="audit-table-wrapper">
-                  <table className="audit-table">
-                    <thead>
-                      <tr>
-                        <th>Decision</th>
-                        <th>Tool</th>
-                        <th>Reason</th>
-                        <th>Arguments</th>
-                        <th style={{ textAlign: 'right' }}>Executed</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {currentRun.audit.map((ev, i) => (
-                        <tr key={i}>
-                          <td>
-                            <span className={
-                              ev.decision === 'ALLOW' ? 'badge-decision-allow' :
-                              ev.decision === 'BLOCK' ? 'badge-decision-block' : 'badge-decision-bypass'
-                            }>
-                              {ev.decision}
-                            </span>
-                          </td>
-                          <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#6ee7b7' }}>
-                            {ev.tool}
-                          </td>
-                          <td style={{ color: 'var(--text-secondary)', maxWidth: 220 }}>
-                            {ev.reason}
-                          </td>
-                          <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontSize: 11, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={JSON.stringify(ev.arguments)}>
-                            {JSON.stringify(ev.arguments)}
-                          </td>
-                          <td style={{ textAlign: 'right', fontWeight: 700 }}>
-                            {ev.executed ? (
-                              <span style={{ color: '#10b981' }}>YES</span>
-                            ) : (
-                              <span style={{ color: '#f43f5e' }}>NO</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Simulated Outbox Panel */}
-          {currentRun?.outbox && currentRun.outbox.length > 0 && (
-            <div className="glass-panel">
-              <div className="panel-header">
-                <span className="panel-title">
-                  <Mail size={16} color="#14b8a6" />
-                  Simulated Outbox ({currentRun.outbox.length}) · no real email sent
-                </span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {currentRun.outbox.map((email, idx) => (
-                  <div key={idx} style={{
-                    padding: '12px 14px',
-                    borderRadius: '10px',
-                    background: 'rgba(4, 12, 10, 0.7)',
-                    border: '1px solid var(--border-subtle)',
-                    fontSize: '12px',
-                    fontFamily: 'var(--font-mono)',
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <span style={{ color: '#5eead4', fontWeight: 700 }}>To: {email.recipient}</span>
-                      <span style={{ color: 'var(--text-muted)' }}>Subject: {email.subject}</span>
-                    </div>
-                    <p style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-sans)', marginTop: 4, lineHeight: 1.4 }}>
-                      {email.body}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Inspect Selected Document */}
-          {selectedDoc && (
-            <div className="glass-panel">
-              <button
-                type="button"
-                onClick={() => setShowDocInspector(!showDocInspector)}
-                style={{
-                  width: '100%',
-                  background: 'none',
-                  border: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  cursor: 'pointer',
-                  padding: 0,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <FileText size={16} color="#10b981" />
-                  <span className="panel-title">
-                    Inspect Document: {selectedDoc.title}
-                  </span>
-                  {selectedDoc.findings_count > 0 && (
-                    <span style={{
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      background: 'rgba(245, 158, 11, 0.15)',
-                      color: '#fbbf24',
-                      padding: '2px 8px',
-                      borderRadius: '6px',
-                      border: '1px solid rgba(245, 158, 11, 0.3)',
-                    }}>
-                      {selectedDoc.findings_count} signals
-                    </span>
-                  )}
-                </div>
-                {showDocInspector ? <ChevronUp size={16} color="var(--text-muted)" /> : <ChevronDown size={16} color="var(--text-muted)" />}
-              </button>
-
-              {showDocInspector && (
-                <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border-subtle)' }}>
-                  {selectedDoc.findings_count > 0 && (
-                    <div style={{ marginBottom: 14 }}>
-                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#fde68a', display: 'block', marginBottom: 6 }}>
-                        Pattern Injection Matches:
-                      </span>
-                      {selectedDoc.findings.map((f, i) => (
-                        <div key={i} style={{
-                          padding: '8px 12px',
-                          borderRadius: '8px',
-                          background: 'rgba(245, 158, 11, 0.1)',
-                          border: '1px solid rgba(245, 158, 11, 0.25)',
-                          fontSize: '11px',
-                          marginBottom: 6,
-                        }}>
-                          <div style={{ fontWeight: 700, color: '#fde68a' }}>{f.signal}</div>
-                          <code style={{ color: '#fef3c7', display: 'block', marginTop: 2 }}>{f.matched_text}</code>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: 4 }}>Raw Content:</div>
-                  <pre style={{
-                    background: '#020605',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: '8px',
-                    padding: '12px',
-                    fontSize: '11.5px',
-                    color: '#a7f3d0',
-                    whiteSpace: 'pre-wrap',
-                    fontFamily: 'var(--font-mono)',
-                    lineHeight: 1.5,
-                  }}>
-                    {selectedDoc.content}
-                  </pre>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+        <section className="surface-card compact-card draft-card"><div className="section-heading"><div><div className="eyebrow">Email action</div><h2>{proposal ? 'Proposal preview' : 'No draft prepared'}</h2></div><Mail size={17}/></div>{proposal ? <><div className="draft-field"><span>To</span><strong>{proposal.recipient || 'Not recorded'}</strong></div><div className="draft-field"><span>Subject</span><strong>{proposal.subject || 'Not recorded'}</strong></div><div className="draft-body">{proposal.body || 'No body recorded.'}</div>{currentRun?.status === 'awaiting_approval' && <><p className="approval-lock">This proposal is fixed for approval. To change it, update the task and run again.</p><div className="button-row"><button type="button" className="button-secondary" disabled={!canOperate || isRunning} onClick={() => onApproveProposal(currentRun.run_id, currentRun.pending_approval.token, false)}><X size={14}/> Deny</button><button type="button" className="button-primary" disabled={!canOperate || isRunning} onClick={() => onApproveProposal(currentRun.run_id, currentRun.pending_approval.token, true)}><Send size={14}/> Approve simulated send</button></div></>}</> : <p className="muted-copy">Email drafts appear here when a run proposes a recipient and email permission is enabled. Approval adds them to the simulated outbox only.</p>}</section>
+      </aside>
     </div>
-  );
+  </div>;
+}
+
+function SafeMarkdown({ text }) {
+  const tokens = marked.lexer(text, { gfm: true });
+  return <div className="markdown-answer">{tokens.map((token, index) => {
+    if (token.type === 'heading') return <h3 key={index}>{token.text}</h3>;
+    if (token.type === 'paragraph') return <p key={index}>{token.text}</p>;
+    if (token.type === 'list') {
+      const List = token.ordered ? 'ol' : 'ul';
+      return <List key={index}>{token.items.map((item, itemIndex) => <li key={itemIndex}>{item.text}</li>)}</List>;
+    }
+    if (token.type === 'code') return <pre key={index}><code>{token.text}</code></pre>;
+    if (token.type === 'blockquote') return <blockquote key={index}>{token.text}</blockquote>;
+    if (token.type === 'hr') return <hr key={index}/>;
+    return null;
+  })}</div>;
 }

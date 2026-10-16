@@ -6,13 +6,20 @@ import ScriptedTestsTab from './components/ScriptedTestsTab';
 import GmailInboxTab from './components/GmailInboxTab';
 import GmailSetupModal from './components/GmailSetupModal';
 import AuditTab from './components/AuditTab';
+import HomeTab from './components/HomeTab';
+import DataSourcesTab from './components/DataSourcesTab';
+import SecurityCenterTab from './components/SecurityCenterTab';
 import { api } from './services/api';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('workspace');
+  const [activeTab, setActiveTab] = useState('home');
   const [health, setHealth] = useState(null);
+  const [initialDataLoaded, setInitialDataLoaded] = useState(false);
   const [documents, setDocuments] = useState([]);
   const [evaluations, setEvaluations] = useState(null);
+  const [runs, setRuns] = useState([]);
+  const [auditRecords, setAuditRecords] = useState([]);
+  const [focusDocumentId, setFocusDocumentId] = useState(null);
   const [gmailStatus, setGmailStatus] = useState({ connected: false, email: null, configured: false });
   const [currentRun, setCurrentRun] = useState(null);
   const [isRunning, setIsRunning] = useState(false);
@@ -26,6 +33,7 @@ export default function App() {
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
+  const canOperate = !authState.required || ['admin', 'operator'].includes(authState.user?.role);
 
   const showError = (msg) => {
     setErrorToast(msg);
@@ -39,16 +47,21 @@ export default function App() {
 
   const loadInitialData = async () => {
     try {
-      const [h, docs, evals, gStatus] = await Promise.all([
+      const [h, docs, evals, gStatus, runHistory, audit] = await Promise.all([
         api.getHealth().catch(() => ({ status: 'error', minimoth_api_key_configured: false, gemini_api_key_configured: false })),
         api.getDocuments().catch(() => []),
         api.getEvaluations().catch(() => null),
         api.getGmailStatus().catch(() => ({ connected: false, email: null, configured: false })),
+        api.getRunsHistory().catch(() => []),
+        api.getAudit({ page_size: 100 }).catch(() => ({ items: [] })),
       ]);
       setHealth(h);
       setDocuments(docs);
       setEvaluations(evals);
       setGmailStatus(gStatus);
+      setRuns(runHistory);
+      setAuditRecords(audit.items || []);
+      setInitialDataLoaded(true);
     } catch (e) {
       console.error('Failed to load initial data:', e);
     }
@@ -110,18 +123,21 @@ export default function App() {
       await api.disconnectGmail();
       setGmailStatus(await api.getGmailStatus());
       showSuccess('Gmail account disconnected successfully.');
-      setActiveTab('workspace');
+      setActiveTab('sources');
     } catch (e) {
       showError(e.message || 'Failed to disconnect Gmail');
     }
   };
 
   const handleStartRun = async (runSettings) => {
+    setCurrentRun(null);
     setIsRunning(true);
     try {
       const run = await api.startRun(runSettings);
       setCurrentRun(run);
       api.getEvaluations().then(setEvaluations).catch(() => {});
+      api.getRunsHistory().then(setRuns).catch(() => {});
+      api.getAudit({ page_size: 100 }).then(result => setAuditRecords(result.items || [])).catch(() => {});
     } catch (e) {
       showError(e.message || 'Failed to start agent run');
     } finally {
@@ -135,6 +151,8 @@ export default function App() {
       const updatedRun = await api.submitApproval(run_id, token, approved);
       setCurrentRun(updatedRun);
       api.getEvaluations().then(setEvaluations).catch(() => {});
+      api.getRunsHistory().then(setRuns).catch(() => {});
+      api.getAudit({ page_size: 100 }).then(result => setAuditRecords(result.items || [])).catch(() => {});
     } catch (e) {
       showError(e.message || 'Failed to submit approval');
     } finally {
@@ -272,14 +290,16 @@ export default function App() {
         onSelectTab={setActiveTab}
         health={health}
         gmailStatus={gmailStatus}
-        onConnectGmail={handleConnectGmail}
         authUser={authState.user}
         onLogout={handleLogout}
-        canOperate={['admin', 'operator'].includes(authState.user?.role)}
+        onOpenGmail={() => setActiveTab('gmail')}
       />
 
       {/* Main Content Areas */}
-      <main style={{ flex: 1 }}>
+      <main className="app-main">
+        {activeTab === 'home' && <HomeTab loading={!initialDataLoaded} health={health} runs={runs} records={auditRecords} gmailStatus={gmailStatus} documents={documents} onNavigate={setActiveTab} />}
+        {activeTab === 'sources' && <DataSourcesTab documents={documents} gmailStatus={gmailStatus} canOperate={canOperate} onConnectGmail={handleConnectGmail} onDisconnectGmail={handleDisconnectGmail} onOpenInbox={() => setActiveTab('gmail')} onUseDocument={id => { setFocusDocumentId(id); setActiveTab('workspace'); }} />}
+        {activeTab === 'security' && <SecurityCenterTab onOpenTests={() => setActiveTab('scripted')} />}
         {activeTab === 'workspace' && (
           <WorkspaceTab
             documents={documents}
@@ -288,7 +308,9 @@ export default function App() {
             onStartRun={handleStartRun}
             onApproveProposal={handleApproveProposal}
             onCancelRun={handleCancelRun}
-            canOperate={['admin', 'operator'].includes(authState.user?.role)}
+            canOperate={canOperate}
+            gmailStatus={gmailStatus}
+            focusDocumentId={focusDocumentId}
           />
         )}
 
@@ -297,7 +319,7 @@ export default function App() {
             evaluations={evaluations}
             documents={documents}
             isComparing={isComparing}
-            canOperate={['admin', 'operator'].includes(authState.user?.role)}
+            canOperate={canOperate}
             onRunComparison={handleRunComparison}
             onRefresh={() => api.getEvaluations().then(setEvaluations)}
           />
@@ -307,7 +329,7 @@ export default function App() {
           <ScriptedTestsTab
             onRunScriptedTests={handleRunScriptedTests}
             isRunning={isTesting}
-            canOperate={['admin', 'operator'].includes(authState.user?.role)}
+            canOperate={canOperate}
           />
         )}
 
@@ -319,7 +341,7 @@ export default function App() {
             onConnectGmail={handleConnectGmail}
             onDisconnectGmail={handleDisconnectGmail}
             onShowSetupModal={() => setShowSetupModal(true)}
-            canOperate={['admin', 'operator'].includes(authState.user?.role)}
+            canOperate={canOperate}
           />
         )}
 
@@ -329,7 +351,7 @@ export default function App() {
 
       {/* Footer */}
       <footer className="app-footer">
-        <p>AI Agent Security (Genesis 2.0) · Team Angry Birds · React + FastAPI</p>
+        <p>AI Guard · Securing AI agents against indirect prompt injection</p>
       </footer>
     </div>
     )

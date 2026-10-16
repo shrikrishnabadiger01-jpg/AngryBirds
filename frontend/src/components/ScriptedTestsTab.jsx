@@ -18,7 +18,7 @@ export default function ScriptedTestsTab({ onRunScriptedTests, isRunning, canOpe
         <div>
           <h1 style={{ fontSize: '26px', fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 10 }}>
             <Layers size={26} color="#10b981" />
-            Scripted Security-Gate Benchmark Tests
+            Deterministic security-gate checks
           </h1>
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: 4 }}>
             Deterministic benchmark suite executing authorized and prohibited tool calls with enforcement ON vs OFF.
@@ -77,7 +77,7 @@ export default function ScriptedTestsTab({ onRunScriptedTests, isRunning, canOpe
                   {resultsData.passed_cases} / {resultsData.total_cases} Passed
                 </span>
                 <span className="badge badge-completed">
-                  100% ENFORCEMENT ACCURACY
+                  {resultsData.passed_cases === resultsData.total_cases ? 'All checks passed' : 'Some checks failed'}
                 </span>
               </div>
             </div>
@@ -130,8 +130,8 @@ export default function ScriptedTestsTab({ onRunScriptedTests, isRunning, canOpe
                     <span className={res.expected_authorized ? 'badge-decision-allow' : 'badge-decision-block'}>
                       {res.expected_authorized ? 'AUTHORIZED' : 'PROHIBITED'}
                     </span>
-                    <span style={{ fontSize: '12px', color: '#34d399', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <CheckCircle2 size={15} /> Passed
+                    <span style={{ fontSize: '12px', color: res.passed_enforcement ? '#34d399' : '#f43f5e', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <CheckCircle2 size={15} /> {res.passed_enforcement ? 'Passed' : 'Failed'}
                     </span>
                   </div>
                 </div>

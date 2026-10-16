@@ -1,120 +1,18 @@
 import React from 'react';
-import { Shield, Cpu, Activity, Layers, Mail, FileSearch } from 'lucide-react';
+import { Shield, House, UsersRound, Database, ShieldCheck, ClipboardCheck, FileSearch, LogOut, Mail } from 'lucide-react';
 
-export default function Header({
-  activeTab,
-  onSelectTab,
-  health,
-  gmailStatus,
-  onConnectGmail,
-  authUser,
-  onLogout,
-  canOperate = true,
-}) {
-  const isHealthy = health?.status === 'healthy';
-  const isMiniMothLive = Boolean(health?.minimoth_api_key_configured || health?.gemini_api_key_configured);
-  const isGmailConnected = gmailStatus?.connected;
-  const gmailEmail = gmailStatus?.email;
+const ITEMS = [
+  ['home', House, 'Home'], ['workspace', UsersRound, 'Agent Workspace'],
+  ['sources', Database, 'Data Sources'], ['security', ShieldCheck, 'Security Center'],
+  ['evaluations', ClipboardCheck, 'Evaluations'], ['audit', FileSearch, 'Audit Logs'],
+];
 
-  const handleGmailButtonClick = () => {
-    if (isGmailConnected) onSelectTab('gmail');
-    else onConnectGmail();
-  };
-  return (
-    <header className="app-header">
-      <div className="header-container">
-        {/* Brand Section */}
-        <div className="brand-section">
-          <div className="brand-logo">
-            <Shield size={22} />
-          </div>
-          <div>
-            <div className="brand-text-title">
-              <span>AI AGENT SECURITY</span>
-              <span className="brand-tag">GENESIS 2.0</span>
-            </div>
-            <div className="brand-subtitle">
-              Team Angry Birds · Runtime Permission Gate
-            </div>
-          </div>
-        </div>
-
-        {/* Navigation Tabs */}
-        <nav className="nav-tab-list">
-          <button
-            type="button"
-            onClick={() => onSelectTab('workspace')}
-            className={`nav-tab-btn ${activeTab === 'workspace' ? 'active' : ''}`}
-          >
-            <Cpu size={15} />
-            <span>Workspace</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onSelectTab('evaluations')}
-            className={`nav-tab-btn ${activeTab === 'evaluations' ? 'active' : ''}`}
-          >
-            <Activity size={15} />
-            <span>Evaluations</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onSelectTab('scripted')}
-            className={`nav-tab-btn ${activeTab === 'scripted' ? 'active' : ''}`}
-          >
-            <Layers size={15} />
-            <span>Scripted Gate Tests</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onSelectTab('audit')}
-            className={`nav-tab-btn ${activeTab === 'audit' ? 'active' : ''}`}
-          >
-            <FileSearch size={15} />
-            <span>Audit History</span>
-          </button>
-          <button
-            id="nav-tab-gmail"
-            type="button"
-            onClick={() => onSelectTab('gmail')}
-            className={`nav-tab-btn ${activeTab === 'gmail' ? 'active' : ''}`}
-          >
-            <Mail size={15} />
-            <span>Gmail Inbox</span>
-            {isGmailConnected && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px #10b981' }} />}
-          </button>
-        </nav>
-
-        {/* Right Section: Gmail Integration Button & Backend Status */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button
-            id="gmail-integration-btn"
-            type="button"
-            onClick={handleGmailButtonClick}
-            disabled={!isGmailConnected && !canOperate}
-            title={isGmailConnected ? `Connected as ${gmailEmail}. Click to view inbox.` : 'Click to connect Google OAuth'}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '7px 14px', borderRadius: '10px', background: isGmailConnected ? 'rgba(16, 185, 129, 0.12)' : 'rgba(6, 18, 14, 0.9)', border: isGmailConnected ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid var(--border-subtle)', color: isGmailConnected ? '#34d399' : 'var(--text-secondary)', cursor: 'pointer', fontSize: '12px', fontWeight: 600, transition: 'all 0.2s ease' }}
-          >
-            <Mail size={15} color={isGmailConnected ? '#10b981' : '#94a3b8'} />
-            <span>{isGmailConnected ? (gmailEmail ? `Gmail: ${gmailEmail}` : 'Gmail Connected') : 'Gmail Disconnected'}</span>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: isGmailConnected ? '#10b981' : '#f59e0b', boxShadow: isGmailConnected ? '0 0 8px #10b981' : 'none' }} />
-          </button>
-          {/* Backend Status indicator */}
-          <div className="status-pill">
-            <span className={`status-dot ${isHealthy ? '' : 'error'}`} />
-            <span>
-              {isMiniMothLive ? 'MiniMoth Live' : 'High-Fidelity Simulator'}
-            </span>
-          </div>
-          {authUser && (
-            <button type="button" onClick={onLogout} className="nav-tab-btn" title={`Sign out ${authUser.username}`}>
-              <span>{authUser.username} · {authUser.role}</span>
-              <span>Sign out</span>
-            </button>
-          )}
-        </div>
-      </div>
-    </header>
-  );
+export default function Header({ activeTab, onSelectTab, health, gmailStatus, authUser, onLogout, onOpenGmail }) {
+  const active = activeTab === 'gmail' ? 'sources' : activeTab === 'scripted' ? 'security' : activeTab;
+  const healthy = health?.status === 'healthy';
+  return <header className="app-header"><div className="header-container">
+    <button className="brand-section" onClick={() => onSelectTab('home')} aria-label="AI Guard home"><span className="brand-logo"><Shield size={21}/></span><span className="brand-copy"><strong>AI Guard</strong><small>Secure AI Agents</small></span></button>
+    <nav className="nav-tab-list" aria-label="Main navigation">{ITEMS.map(([id, Icon, label]) => <button key={id} type="button" onClick={() => onSelectTab(id)} className={`nav-tab-btn ${active === id ? 'active' : ''}`}><Icon size={15}/><span>{label}</span></button>)}</nav>
+    <div className="header-controls"><div className="header-system"><span className={`state-dot ${!health ? 'is-neutral' : healthy ? 'is-good' : 'is-bad'}`}/>{!health ? 'Checking system' : healthy ? 'System online' : 'System unavailable'}</div><button className="header-mail" title={gmailStatus?.connected ? `Gmail connected: ${gmailStatus.email || ''}` : 'Gmail not connected'} onClick={onOpenGmail} aria-label="Open Gmail inbox"><Mail size={17}/><span className={`state-dot ${gmailStatus?.connected ? 'is-good' : 'is-neutral'}`}/></button>{authUser && <button type="button" onClick={onLogout} className="user-menu" title={`Sign out ${authUser.username}`}><span className="user-avatar">{authUser.username.slice(0, 2).toUpperCase()}</span><span>{authUser.username} · {authUser.role}</span><LogOut size={14}/></button>}</div>
+  </div></header>;
 }

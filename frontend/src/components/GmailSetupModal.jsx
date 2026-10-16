@@ -15,7 +15,7 @@ export default function GmailSetupModal({ isOpen, onClose }) {
   };
 
   return (
-    <div style={{
+    <div className="setup-modal-backdrop" style={{
       position: 'fixed',
       inset: 0,
       zIndex: 9999,
@@ -26,7 +26,7 @@ export default function GmailSetupModal({ isOpen, onClose }) {
       justifyContent: 'center',
       padding: '20px',
     }}>
-      <div className="glass-panel" style={{
+      <div className="glass-panel setup-modal" style={{
         maxWidth: '580px',
         width: '100%',
         background: 'rgba(10, 28, 23, 0.95)',
@@ -80,7 +80,7 @@ export default function GmailSetupModal({ isOpen, onClose }) {
           lineHeight: 1.5,
         }}>
           <strong>Security Guarantee: </strong>
-          IgnisGuard requests only the minimum read-only scope (<code>gmail.readonly</code>). It cannot send, forward, delete, or modify emails. Tokens are encrypted server-side in SQLite and never reach the browser.
+          AI Guard requests only the minimum read-only scope (<code>gmail.readonly</code>). It cannot send, forward, delete, or modify emails. Tokens are encrypted server-side in SQLite and never reach the browser.
         </div>
 
         {/* Setup Steps */}

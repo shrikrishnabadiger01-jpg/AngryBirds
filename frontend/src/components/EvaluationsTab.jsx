@@ -52,10 +52,10 @@ export default function EvaluationsTab({
         <div>
           <h1 style={{ fontSize: '26px', fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 10 }}>
             <Activity size={26} color="#10b981" />
-            Security Gate Evaluations & Benchmarking
+            Evaluations
           </h1>
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: 4 }}>
-            Empirical measurement of backend policy enforcement: comparing identical tasks with Gate ON vs Gate OFF.
+            Compare identical tasks with enforcement enabled and disabled. The gate-on run is protected; gate-off is a control.
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -105,28 +105,33 @@ export default function EvaluationsTab({
       {/* Metric Cards Grid */}
       <div className="metrics-grid">
         <div className="metric-card">
-          <div className="metric-title">Total Evaluated Runs</div>
+          <div className="metric-title">Recorded comparison runs</div>
           <div className="metric-value">{metrics.total_runs}</div>
           <div className="metric-desc">Historical comparative runs</div>
         </div>
 
         <div className="metric-card">
-          <div className="metric-title" style={{ color: '#34d399' }}>Completed Runs</div>
+          <div className="metric-title" style={{ color: '#34d399' }}>Completed comparisons</div>
           <div className="metric-value" style={{ color: '#34d399' }}>{metrics.completed_runs}</div>
           <div className="metric-desc">Valid agent responses</div>
         </div>
 
         <div className="metric-card">
-          <div className="metric-title" style={{ color: '#f43f5e' }}>Attacks Blocked (Gate ON)</div>
+          <div className="metric-title" style={{ color: '#f43f5e' }}>Blocked calls</div>
           <div className="metric-value" style={{ color: '#f43f5e' }}>{metrics.blocked_calls}</div>
           <div className="metric-desc">Intercepted unauthorized calls</div>
         </div>
 
         <div className="metric-card">
-          <div className="metric-title" style={{ color: '#fbbf24' }}>Secret Leaks (Gate OFF)</div>
+          <div className="metric-title" style={{ color: '#fbbf24' }}>Observed marker leaks</div>
           <div className="metric-value" style={{ color: '#fbbf24' }}>{metrics.marker_leaked}</div>
           <div className="metric-desc">Exfiltrations when gate disabled</div>
         </div>
+      </div>
+
+      <div className="metrics-grid evaluation-limits">
+        <div className="metric-card"><div className="metric-title">False positives</div><div className="metric-value">N/A</div><div className="metric-desc">Comparison logs do not classify false positives.</div></div>
+        <div className="metric-card"><div className="metric-title">False negatives</div><div className="metric-value">N/A</div><div className="metric-desc">Comparison logs do not classify false negatives.</div></div>
       </div>
 
       {/* Live Comparison Runner Form */}
@@ -293,12 +298,12 @@ export default function EvaluationsTab({
               <thead>
                 <tr>
                   <th>Recorded (UTC)</th>
-                  <th>Document</th>
+                  <th>Task / document</th>
                   <th>Mode</th>
-                  <th>Status</th>
-                  <th>Unauthorized Executed</th>
-                  <th>Blocked Calls</th>
-                  <th style={{ textAlign: 'right' }}>Attacker Exfil</th>
+                  <th>Expected</th>
+                  <th>Unauthorized actions</th>
+                  <th>Result</th>
+                  <th>Marker leak</th>
                 </tr>
               </thead>
               <tbody>
@@ -308,22 +313,18 @@ export default function EvaluationsTab({
                       {row.recorded_at ? new Date(row.recorded_at).toLocaleTimeString() : 'N/A'}
                     </td>
                     <td style={{ fontWeight: 600, color: '#34d399' }}>
-                      {row.document}
+                      {row.task || row.document}
                     </td>
                     <td>
                       <span className={row.mode === 'Gate ON' ? 'badge-decision-allow' : 'badge-decision-block'}>
                         {row.mode}
                       </span>
                     </td>
-                    <td style={{ color: 'var(--text-secondary)' }}>
-                      {row.status}
-                    </td>
+                    <td>{row.mode === 'Gate ON' ? 'No unauthorized action' : 'Control run'}</td>
                     <td style={{ fontWeight: 700, color: row.unauthorized_executed > 0 ? '#f43f5e' : '#10b981' }}>
                       {row.unauthorized_executed}
                     </td>
-                    <td style={{ color: '#5eead4', fontWeight: 700 }}>
-                      {row.blocked_calls}
-                    </td>
+                    <td>{row.mode === 'Gate ON' ? (row.unauthorized_executed === 0 && !row.marker_sent_to_attacker && !row.marker_in_answer ? 'PASS' : 'FAIL') : row.status}</td>
                     <td style={{ textAlign: 'right', fontWeight: 700 }}>
                       {row.marker_sent_to_attacker ? (
                         <span style={{ color: '#f43f5e' }}>YES</span>
