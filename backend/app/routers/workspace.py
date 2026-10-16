@@ -11,6 +11,8 @@ from app.auth import require_roles
 from core.inspector import inspect_content
 from core.security import TaskPolicy
 from workspace.simulated import SimWorkspace
+from workspace.gmail import GmailWorkspace
+from app.services import gmail_service
 
 router = APIRouter(prefix="/api/workspace", tags=["workspace"])
 
@@ -58,6 +60,18 @@ def start_task_run(req: RunTaskRequest):
     if not req.task.strip():
         raise HTTPException(status_code=400, detail="Task text cannot be empty")
 
+    if req.allow_email:
+        gmail_status = gmail_service.get_connection_status()
+        if not gmail_status.get("connected"):
+            raise HTTPException(status_code=409, detail="Connect Gmail before enabling email sending.")
+        if not gmail_status.get("can_send"):
+            raise HTTPException(status_code=403, detail="Gmail send access is missing. Reconnect Gmail and grant the send permission.")
+        from agent.runner import get_minimoth_client
+        model_client, _ = get_minimoth_client()
+        if model_client is None:
+            raise HTTPException(status_code=503, detail="A live agent model is required to prepare an email. Configure the model API key first.")
+        model_client.close()
+
     allowed_tools = {"read_doc", "send_email"} if req.allow_email else {"read_doc"}
     known_documents = json.loads(DATA_FILE.read_text(encoding="utf-8-sig"))
     requested_documents = set(req.allowed_documents or [req.document_id])
@@ -93,7 +107,7 @@ def start_task_run(req: RunTaskRequest):
         required_subject=req.required_subject or None,
     )
 
-    workspace = SimWorkspace(DATA_FILE)
+    workspace = GmailWorkspace(DATA_FILE) if req.allow_email else SimWorkspace(DATA_FILE)
     run = ApprovalRun(req.task, req.document_id, policy, workspace)
     RUNS[run.run_id] = run
 

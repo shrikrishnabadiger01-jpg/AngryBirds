@@ -82,10 +82,6 @@ export default function ScriptedTestsTab({ onRunScriptedTests, isRunning, canOpe
               </div>
             </div>
 
-            <div style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', textAlign: 'right' }}>
-              <div>Policy Scope: <span style={{ color: '#34d399' }}>project_report</span></div>
-              <div>Authorized Recipient: <span style={{ color: '#5eead4' }}>manager@example.com</span></div>
-            </div>
           </div>
 
           {/* Test Cases List */}

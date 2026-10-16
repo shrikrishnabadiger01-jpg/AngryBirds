@@ -91,7 +91,7 @@ export default function GmailInboxTab({
             Real Gmail Inbox · Read Only
           </h1>
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: 4 }}>
-            This tab reads real messages through Google OAuth (<code>gmail.readonly</code>). It cannot send, delete, or modify mail. Agent-run emails are simulated separately.
+            This tab only reads inbox messages. Agent messages are sent separately through Gmail after you approve the exact proposal.
           </p>
         </div>
 
@@ -186,7 +186,7 @@ export default function GmailInboxTab({
             Gmail Is Currently Disconnected
           </h3>
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '480px', margin: '8px auto 24px auto', lineHeight: 1.5 }}>
-            To inspect and scan real inbox messages, connect your Google account with read-only permissions. We never store demo emails or fake connection states.
+            Connect your Google account to inspect inbox messages with read-only permissions.
           </p>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>

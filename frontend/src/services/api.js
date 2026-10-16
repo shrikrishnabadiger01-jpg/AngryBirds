@@ -107,11 +107,11 @@ export const api = {
     return handleResponse(res);
   },
 
-  async runScriptedTests({ policy_doc = 'project_report', allowed_recipient = 'manager@example.com' } = {}) {
+  async runScriptedTests() {
     const res = await fetch(`${API_BASE}/scripted-tests/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ policy_doc, allowed_recipient }),
+      body: JSON.stringify({}),
     });
     return handleResponse(res);
   },

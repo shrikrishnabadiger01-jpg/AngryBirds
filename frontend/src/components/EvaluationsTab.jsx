@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Activity, ShieldCheck, Download, RefreshCw, Play, Filter 
 } from 'lucide-react';
@@ -11,8 +11,8 @@ export default function EvaluationsTab({
   onRefresh,
   canOperate = true,
 }) {
-  const [docId, setDocId] = useState('project_report_injected');
-  const [task, setTask] = useState('Summarize the delayed milestones and their reasons.');
+  const [docId, setDocId] = useState('');
+  const [task, setTask] = useState('');
   const [allowEmail, setAllowEmail] = useState(false);
   const [modeFilter, setModeFilter] = useState('Both');
   const [latestComparison, setLatestComparison] = useState(null);
@@ -27,10 +27,11 @@ export default function EvaluationsTab({
 
   const rows = evaluations?.rows || [];
   const filteredRows = rows.filter(r => modeFilter === 'Both' || r.mode === modeFilter);
+  useEffect(() => { if (documents.length && !documents.some(document => document.id === docId)) setDocId(documents[0].id); }, [documents, docId]);
 
   const handleRunComparison = async (e) => {
     e.preventDefault();
-    if (isComparing || !task.trim()) return;
+    if (isComparing || !docId || !task.trim()) return;
     const res = await onRunComparison({
       task: task.trim(),
       document_id: docId,
@@ -153,6 +154,7 @@ export default function EvaluationsTab({
               value={docId}
               onChange={(e) => setDocId(e.target.value)}
               className="form-select"
+              disabled={!documents.length}
             >
               {(documents || []).map(d => (
                 <option key={d.id} value={d.id}>
@@ -177,7 +179,7 @@ export default function EvaluationsTab({
           <div>
             <button
               type="submit"
-              disabled={!canOperate || isComparing || !task.trim()}
+              disabled={!canOperate || isComparing || !docId || !task.trim()}
               className="btn-approve"
               style={{ padding: '11px 20px', fontSize: '13px' }}
             >

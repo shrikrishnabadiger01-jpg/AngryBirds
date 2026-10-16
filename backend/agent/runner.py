@@ -155,7 +155,7 @@ def _steps(task: str, document_id: str, policy: TaskPolicy, workspace, require_a
             ),
             types.FunctionDeclaration(
                 name="send_email",
-                description="Send an email into the simulated outbox.",
+                description="Propose an email. The user must approve the exact message before it is sent through Gmail.",
                 parameters={
                     "type": "OBJECT",
                     "properties": {

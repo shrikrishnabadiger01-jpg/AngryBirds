@@ -63,7 +63,7 @@ export default function GmailSetupModal({ isOpen, onClose }) {
               Google OAuth Setup Required
             </h3>
             <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-              Enable read-only Gmail access with Google Cloud OAuth 2.0
+              Enable Gmail inbox and approved sending access with Google Cloud OAuth 2.0
             </p>
           </div>
         </div>
@@ -79,8 +79,8 @@ export default function GmailSetupModal({ isOpen, onClose }) {
           marginBottom: '20px',
           lineHeight: 1.5,
         }}>
-          <strong>Security Guarantee: </strong>
-          AI Guard requests only the minimum read-only scope (<code>gmail.readonly</code>). It cannot send, forward, delete, or modify emails. Tokens are encrypted server-side in SQLite and never reach the browser.
+          <strong>Security: </strong>
+          Gmail inbox access is read-only. Sending uses the separate <code>gmail.send</code> scope and happens only after you approve the exact recipient, subject, and message. Tokens are encrypted server-side in SQLite and never reach the browser.
         </div>
 
         {/* Setup Steps */}
@@ -153,7 +153,14 @@ GOOGLE_CLIENT_SECRET=your_client_secret
           <div>
             <strong style={{ color: '#ffffff' }}>Step 4: </strong>
             <span style={{ color: 'var(--text-secondary)' }}>
-              Restart your backend server, then click <strong>Gmail Integration</strong> to log in.
+              In Google Cloud Console, enable the Gmail API and add <code>gmail.readonly</code> and <code>gmail.send</code> under OAuth Data Access. Google may require verification before other users can authorize these scopes.
+            </span>
+          </div>
+
+          <div>
+            <strong style={{ color: '#ffffff' }}>Step 5: </strong>
+            <span style={{ color: 'var(--text-secondary)' }}>
+              Restart the backend, then connect or reconnect Gmail to grant the new permissions.
             </span>
           </div>
         </div>

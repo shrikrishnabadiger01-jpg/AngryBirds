@@ -16,7 +16,7 @@ load_dotenv(_env_path)
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    # Google OAuth 2.0 (read-only Gmail)
+    # Google OAuth 2.0 Gmail access
     google_client_id: str = ""
     google_client_secret: str = ""
     google_redirect_uri: str = "http://localhost:8000/api/gmail/callback"
@@ -34,8 +34,11 @@ class Settings(BaseSettings):
     # MiniMoth LLM API Key (paste your API key here or in .env)
     minimoth_api_key: str = ""
 
-    # Gmail API scope — STRICTLY READ-ONLY
-    gmail_scopes: list[str] = ["https://www.googleapis.com/auth/gmail.readonly"]
+    # Gmail API scopes; send actions remain approval-gated in the workspace.
+    gmail_scopes: list[str] = [
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/gmail.send",
+    ]
 
     @property
     def has_google_credentials(self) -> bool:

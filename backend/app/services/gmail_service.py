@@ -1,7 +1,7 @@
 """
 IgnisGuard — Gmail Service
 Handles Gmail API integration with Google OAuth 2.0.
-Uses minimum read-only Gmail scope: https://www.googleapis.com/auth/gmail.readonly
+Uses Gmail read and send scopes; outbound messages require explicit app approval.
 Credentials and tokens are stored securely server-side in the SQLite database.
 Never exposes OAuth secrets or access tokens to the frontend.
 """
@@ -12,6 +12,7 @@ import datetime
 import base64
 import html
 import re
+from email.message import EmailMessage
 from typing import Optional, Dict, Any, List, Tuple
 
 import httpx
@@ -141,7 +142,7 @@ def delete_credentials() -> bool:
 
 
 def create_oauth_flow() -> Tuple[Flow, str]:
-    """Create a Google OAuth 2.0 flow with minimum read-only scope and secure CSRF state."""
+    """Create a Google OAuth flow with configured Gmail scopes and secure CSRF state."""
     if not settings.has_google_credentials:
         raise ValueError(
             "Google OAuth credentials not configured. "
@@ -205,17 +206,57 @@ def get_connection_status() -> Dict[str, Any]:
     """Return the current connection state without exposing secrets."""
     creds, email = get_stored_credentials()
     if creds and creds.valid:
+        granted_scopes = list(creds.scopes or settings.gmail_scopes)
         return {
             "connected": True,
             "email": email,
             "configured": True,
-            "scopes": list(creds.scopes) if creds.scopes else settings.gmail_scopes,
+            "scopes": granted_scopes,
+            "can_send": "https://www.googleapis.com/auth/gmail.send" in granted_scopes,
         }
     return {
         "connected": False,
         "email": None,
         "configured": settings.has_google_credentials,
         "scopes": settings.gmail_scopes,
+        "can_send": False,
+    }
+
+
+def has_scope(scope: str) -> bool:
+    creds, _ = get_stored_credentials()
+    return bool(creds and creds.valid and scope in (creds.scopes or []))
+
+
+def send_email(recipient: str, subject: str, body: str) -> Dict[str, Any]:
+    """Send one message through Gmail using an explicitly granted send scope."""
+    creds, connected_email = get_stored_credentials()
+    if not creds or not creds.valid:
+        raise PermissionError("Gmail is not connected. Connect Gmail before sending.")
+    if "https://www.googleapis.com/auth/gmail.send" not in (creds.scopes or []):
+        raise PermissionError("Gmail send access has not been granted. Reconnect Gmail and approve the send permission.")
+
+    message = EmailMessage()
+    message["To"] = recipient
+    message["Subject"] = subject
+    message.set_content(body)
+    raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
+
+    service = build("gmail", "v1", credentials=creds)
+    try:
+        sent = service.users().messages().send(userId="me", body={"raw": raw_message}).execute()
+    except HttpError as exc:
+        status = getattr(getattr(exc, "resp", None), "status", None)
+        if status == 401:
+            raise PermissionError("Gmail authorization expired. Reconnect Gmail and try again.") from exc
+        if status == 403:
+            raise PermissionError("Google denied Gmail send access. Check the OAuth consent configuration.") from exc
+        raise RuntimeError("Gmail could not send this message. Review the Gmail connection and try again.") from exc
+
+    return {
+        "message_id": sent.get("id"),
+        "thread_id": sent.get("threadId"),
+        "sender": connected_email,
     }
 
 

@@ -138,6 +138,53 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .workspace-heading { align-items: center; margin-bottom: 16px; }
 .workspace-layout { display: grid; grid-template-columns: minmax(190px, .75fr) minmax(390px, 1.75fr) minmax(250px, .95fr); gap: 12px; align-items: start; }
 .workspace-left, .workspace-center, .workspace-right { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.available-tools-card { padding: 0; overflow: hidden; }
+.available-tools-heading { padding: 13px 12px 11px; border-bottom: 1px solid var(--line); }
+.available-tools-heading h2 { margin: 0 0 4px; font-size: 12px; }
+.available-tools-heading p { max-width: 195px; margin: 0; color: var(--muted); font-size: 9px; line-height: 1.4; }
+.available-tools-list { display: flex; flex-direction: column; }
+.available-tool-row { min-width: 0; display: flex; align-items: flex-start; gap: 9px; padding: 11px 10px 10px; border-bottom: 1px solid var(--line); }
+.available-tool-row:last-child { border-bottom: 0; }
+.available-tool-icon { width: 34px; height: 34px; flex: 0 0 34px; display: grid; place-items: center; margin-top: 1px; border: 1px solid transparent; border-radius: 9px; }
+.gmail-tool-icon { border-color: #deddd7; color: #db4437; background: #fffefa; }
+.gmail-mark { width: 21px; height: 18px; }
+.documents-tool-icon { color: #2472d8; background: #dcecff; }
+.web-tool-icon { color: #2878eb; background: #e1ecff; }
+.slack-tool-icon { color: #b26b00; background: #ffedbd; }
+.calendar-tool-icon { color: #b64d36; background: #f9e0d5; }
+.available-tool-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; padding-top: 1px; }
+.available-tool-copy strong { overflow: hidden; color: var(--ink); font-size: 10px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+.available-tool-copy small { margin-top: 3px; color: var(--muted); font-size: 9px; line-height: 1.35; }
+.tool-connection { display: inline-flex; align-items: center; gap: 5px; margin-top: 5px; font-size: 9px; font-weight: 650; line-height: 1.2; }
+.tool-connection i { width: 8px; height: 8px; border: 1px solid currentColor; border-radius: 50%; position: relative; }
+.tool-connection.connected { color: #33854d; }
+.tool-connection.connected i { background: #3e9d5a; box-shadow: inset 0 0 0 2px #edf5eb; }
+.tool-connection.disconnected { color: #bb5545; }
+.tool-connection.disconnected i { background: #c95040; box-shadow: inset 0 0 0 2px #fbefeb; }
+.tool-toggle { width: 31px; height: 18px; flex: 0 0 31px; position: relative; margin: 5px 0 0 auto; padding: 0; border: 0; border-radius: 999px; background: #b9b8b1; cursor: pointer; transition: background .15s ease; }
+.tool-toggle span { width: 14px; height: 14px; position: absolute; top: 2px; left: 2px; border-radius: 50%; background: #fffefa; box-shadow: 0 1px 2px #0002; transition: transform .15s ease; }
+.tool-toggle.checked { background: #657b54; }
+.tool-toggle.checked.amber { background: #d49142; }
+.tool-toggle.checked span { transform: translateX(13px); }
+.tool-toggle:disabled { cursor: not-allowed; opacity: .9; }
+.tool-toggle:focus-visible { outline: 2px solid var(--sage); outline-offset: 2px; }
+.tool-permissions-card { padding: 13px 12px 12px; }
+.tool-permissions-heading h2 { margin: 0 0 4px; font-size: 12px; }
+.tool-permissions-heading p { margin: 0 0 11px; color: var(--muted); font-size: 9px; line-height: 1.4; }
+.tool-permissions-list { overflow: hidden; border: 1px solid var(--line); border-radius: 7px; }
+.tool-permission-row { min-height: 42px; display: grid; grid-template-columns: minmax(0,1fr) auto 31px; align-items: center; column-gap: 8px; padding: 0 8px; border-bottom: 1px solid var(--line); }
+.tool-permission-row:last-child { border-bottom: 0; }
+.tool-permission-row > strong { min-width: 0; overflow: hidden; font-size: 9px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
+.tool-permission-status { font-size: 9px; white-space: nowrap; }
+.tool-permission-status.allowed { color: #33854d; }
+.tool-permission-status.confirmation { color: #a96b20; }
+.tool-permission-status.disabled { color: #bb5545; }
+.tool-permission-row .tool-toggle { margin-top: 0; }
+.manage-permissions-button { width: 100%; min-height: 38px; display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 11px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: transparent; font-size: 10px; font-weight: 650; cursor: pointer; }
+.manage-permissions-button:hover { border-color: var(--sage); background: var(--surface-2); }
+.permission-details { margin-top: 10px; padding: 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); }
+.permission-details p { margin: 0; color: var(--muted); font-size: 9px; line-height: 1.45; }
+.permission-details p + p { margin-top: 6px; }
 .compact-card { padding: 14px; }
 .compact-card .section-heading { margin-bottom: 10px; }
 .tool-list { display: flex; flex-direction: column; }
