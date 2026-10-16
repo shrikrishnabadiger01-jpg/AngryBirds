@@ -60,17 +60,14 @@ export default function App() {
     const gmailParam = params.get('gmail');
     const emailParam = params.get('email');
     const reasonParam = params.get('reason');
-
     if (gmailParam === 'connected') {
       showSuccess(`Gmail connected successfully! Authorized as: ${emailParam || 'authenticated user'}`);
       setActiveTab('gmail');
-      // Clean query parameters from URL
       window.history.replaceState({}, document.title, window.location.pathname);
     } else if (gmailParam === 'error') {
       showError(`Google OAuth failed: ${reasonParam || 'Authentication was cancelled'}`);
       window.history.replaceState({}, document.title, window.location.pathname);
     }
-
     api.getAuthSession().then((session) => {
       setAuthState(session);
       if (!session.required || session.user) loadInitialData();
@@ -101,24 +98,17 @@ export default function App() {
   const handleConnectGmail = async () => {
     try {
       const res = await api.getGmailAuthUrl();
-      if (res?.auth_url) {
-        window.location.href = res.auth_url;
-      }
+      if (res?.auth_url) window.location.href = res.auth_url;
     } catch (e) {
-      // If server returns credentials not configured, open the setup guide modal
-      if (e.message?.includes('not configured')) {
-        setShowSetupModal(true);
-      } else {
-        showError(e.message || 'Failed to start Google OAuth');
-      }
+      if (e.message?.includes('not configured')) setShowSetupModal(true);
+      else showError(e.message || 'Failed to start Google OAuth');
     }
   };
 
   const handleDisconnectGmail = async () => {
     try {
       await api.disconnectGmail();
-      const updatedStatus = await api.getGmailStatus();
-      setGmailStatus(updatedStatus);
+      setGmailStatus(await api.getGmailStatus());
       showSuccess('Gmail account disconnected successfully.');
       setActiveTab('workspace');
     } catch (e) {
@@ -332,17 +322,14 @@ export default function App() {
             canOperate={['admin', 'operator'].includes(authState.user?.role)}
           />
         )}
+
       </main>
 
-      {/* Google Cloud Setup Guide Modal */}
-      <GmailSetupModal
-        isOpen={showSetupModal}
-        onClose={() => setShowSetupModal(false)}
-      />
+      <GmailSetupModal isOpen={showSetupModal} onClose={() => setShowSetupModal(false)} />
 
       {/* Footer */}
       <footer className="app-footer">
-        <p>AI Agent Security (Genesis 2.0) · Team Angry Birds · React + FastAPI Architecture with Gmail OAuth</p>
+        <p>AI Agent Security (Genesis 2.0) · Team Angry Birds · React + FastAPI</p>
       </footer>
     </div>
     )

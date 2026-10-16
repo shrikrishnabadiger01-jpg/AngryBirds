@@ -116,35 +116,29 @@ export const api = {
     return handleResponse(res);
   },
 
-  // Gmail OAuth and Email Reading APIs
+  // Gmail OAuth and email reading APIs
   async getGmailStatus() {
-    const res = await fetch(`${API_BASE}/gmail/status`);
-    return handleResponse(res);
+    return handleResponse(await fetch(`${API_BASE}/gmail/status`));
   },
 
   async getGmailAuthUrl() {
-    const res = await fetch(`${API_BASE}/gmail/auth`);
-    return handleResponse(res);
+    return handleResponse(await fetch(`${API_BASE}/gmail/auth`));
   },
 
   async disconnectGmail() {
-    const res = await fetch(`${API_BASE}/gmail/disconnect`, {
-      method: 'POST',
-    });
-    return handleResponse(res);
+    return handleResponse(await fetch(`${API_BASE}/gmail/disconnect`, { method: 'POST' }));
   },
 
   async getEmails(max_results = 20) {
-    const res = await fetch(`${API_BASE}/emails?max_results=${max_results}`);
-    return handleResponse(res);
+    return handleResponse(await fetch(`${API_BASE}/emails?max_results=${max_results}`));
   },
 
   async analyzeEmail({ email_id, subject, body, sender, recipient }) {
-    const res = await fetch(`${API_BASE}/emails/analyze`, {
+    return handleResponse(await fetch(`${API_BASE}/emails/analyze`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email_id, subject, body, sender, recipient }),
-    });
-    return handleResponse(res);
+    }));
   },
+
 };
