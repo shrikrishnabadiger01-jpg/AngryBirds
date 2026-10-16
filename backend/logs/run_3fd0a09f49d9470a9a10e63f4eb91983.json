@@ -1,0 +1,23 @@
+{
+  "run_id": "3fd0a09f49d9470a9a10e63f4eb91983",
+  "status": "error",
+  "task": "summarize my past 3 emails",
+  "document": "project_report",
+  "answer": null,
+  "error": "404 NOT_FOUND. {'error': {'code': 404, 'message': 'This model models/gemini-2.5-flash is no longer available to new users. Please update your code to use models/gemini-3.8-flash for the latest features and improvements. We recommend you to use the Interactions API (https://ai.google.dev/gemini-api/docs/get-started).', 'status': 'NOT_FOUND'}}",
+  "pending_approval": null,
+  "approvals": [],
+  "audit": [],
+  "outbox": [],
+  "policy": {
+    "allowed_tools": [
+      "read_doc"
+    ],
+    "allowed_documents": [
+      "project_report"
+    ],
+    "allowed_recipients": [],
+    "max_emails": 0,
+    "required_subject": null
+  }
+}

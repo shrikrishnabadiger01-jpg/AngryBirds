@@ -60,11 +60,11 @@ export const api = {
     return handleResponse(res);
   },
 
-  async startRun({ task, document_id, allow_email, recipient, allowed_documents, allowed_recipients, max_emails, required_subject }) {
+  async startRun({ task, document_id, email_id, allow_email, recipient, allowed_documents, allowed_recipients, max_emails, required_subject }) {
     const res = await fetch(`${API_BASE}/workspace/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ task, document_id, allow_email, recipient, allowed_documents, allowed_recipients, max_emails, required_subject }),
+      body: JSON.stringify({ task, document_id, email_id, allow_email, recipient, allowed_documents, allowed_recipients, max_emails, required_subject }),
     });
     return handleResponse(res);
   },

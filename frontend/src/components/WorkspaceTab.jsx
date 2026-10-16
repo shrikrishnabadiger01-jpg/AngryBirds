@@ -4,6 +4,7 @@ import { Activity, AlertTriangle, Check, ChevronDown, LockKeyhole, Mail, Play, R
 import { Decision, EmptyState } from './HomeTab';
 import AvailableTools from './AvailableTools';
 import ToolPermissions from './ToolPermissions';
+import { api } from '../services/api';
 
 export default function WorkspaceTab({ documents = [], currentRun, isRunning, onStartRun, onApproveProposal, canOperate = true, gmailStatus, focusDocumentId, onConnectGmail, onDisconnectGmail }) {
   const [selectedDocId, setSelectedDocId] = useState('');
@@ -14,36 +15,57 @@ export default function WorkspaceTab({ documents = [], currentRun, isRunning, on
   const [maxEmails, setMaxEmails] = useState(1);
   const [requiredSubject, setRequiredSubject] = useState('');
   const [documentsEnabled, setDocumentsEnabled] = useState(documents.length > 0);
+  const [sourceType, setSourceType] = useState('document');
+  const [inboxEmails, setInboxEmails] = useState([]);
+  const [selectedEmailId, setSelectedEmailId] = useState('');
+  const [emailLoading, setEmailLoading] = useState(false);
   const docs = documents.filter(doc => !doc.is_confidential);
+  const emailSummaryRequest = /\b(?:summari[sz]e|summary)\b.{0,40}\b(?:email|inbox|message)\b|\b(?:email|inbox|message)\b.{0,40}\b(?:summari[sz]e|summary)\b/i.test(taskText);
   useEffect(() => { if (docs.length > 0) setDocumentsEnabled(true); }, [docs.length]);
   const selectedDoc = docs.find(doc => doc.id === selectedDocId) || docs[0];
   useEffect(() => { if (docs.length && !docs.some(doc => doc.id === selectedDocId)) setSelectedDocId(docs[0].id); }, [documents, selectedDocId]);
   useEffect(() => { if (focusDocumentId && docs.some(doc => doc.id === focusDocumentId)) setSelectedDocId(focusDocumentId); }, [focusDocumentId, documents]);
   useEffect(() => { if (selectedDocId && !allowedDocuments.includes(selectedDocId)) setAllowedDocuments(current => [...current, selectedDocId]); }, [selectedDocId]);
+  useEffect(() => {
+    let active = true;
+    if (!gmailStatus?.connected) { setInboxEmails([]); setSelectedEmailId(''); return () => { active = false; }; }
+    setEmailLoading(true);
+    api.getEmails(20).then(result => {
+      if (!active) return;
+      const messages = result.emails || [];
+      setInboxEmails(messages);
+      setSelectedEmailId(current => messages.some(email => email.id === current) ? current : messages[0]?.id || '');
+    }).catch(() => { if (active) setInboxEmails([]); }).finally(() => { if (active) setEmailLoading(false); });
+    return () => { active = false; };
+  }, [gmailStatus?.connected]);
 
   const events = currentRun?.audit || [];
   const lastDecision = events.length ? events[events.length - 1] : null;
   const proposal = currentRun?.pending_approval?.proposal || currentRun?.outbox?.[currentRun.outbox.length - 1] || null;
   const hasRead = events.some(event => event.tool === 'read_doc');
+  const hasReadEmail = events.some(event => event.tool === 'read_email');
   const steps = useMemo(() => {
     const pending = currentRun?.status === 'awaiting_approval';
     const sent = (currentRun?.outbox || []).length > 0;
     const started = Boolean(currentRun);
     return [
       ['Parse user request', 'Identify the requested outcome and authorized actions', started ? 'done' : 'idle'],
-      ['Retrieve relevant data', hasRead ? `Read ${selectedDoc?.title || 'selected document'}` : 'Waits for an agent run', hasRead ? 'done' : 'idle'],
-      ['Inspect untrusted content', hasRead ? 'Inspection runs before document content is used' : 'Content is not read until the task starts', hasRead ? 'done' : 'idle'],
+      ['Retrieve relevant data', hasReadEmail ? 'Read the selected Gmail message' : hasRead ? `Read ${selectedDoc?.title || 'selected document'}` : 'Waits for an agent run', hasRead || hasReadEmail ? 'done' : 'idle'],
+      ['Inspect untrusted content', hasReadEmail ? 'Email content is treated as untrusted' : hasRead ? 'Inspection runs before document content is used' : 'Content is not read until the task starts', hasRead || hasReadEmail ? 'done' : 'idle'],
       ['Check permissions and intent', lastDecision ? `${lastDecision.decision}: ${lastDecision.reason}` : 'Policy is fixed before external content is read', lastDecision ? 'done' : started ? 'done' : 'idle'],
       ['Prepare requested action', proposal ? `Proposal for ${proposal.recipient || 'recipient not recorded'}` : currentRun?.answer ? 'No email action was proposed' : 'No action prepared yet', proposal || currentRun?.answer ? 'done' : 'idle'],
       ['Human confirmation', pending ? 'Review and approve or deny the exact proposal' : allowEmail ? 'Required before Gmail sends a message' : 'No email permission granted', pending ? 'review' : sent ? 'done' : 'idle'],
       ['Execute if authorized', sent ? 'Sent through Gmail' : pending ? 'Waiting for your decision' : currentRun?.status === 'completed' ? 'Run completed' : 'No action executed', sent || currentRun?.status === 'completed' ? 'done' : pending ? 'idle' : 'idle'],
     ];
-  }, [currentRun, events, hasRead, selectedDoc, lastDecision, proposal, allowEmail]);
+  }, [currentRun, events, hasRead, hasReadEmail, selectedDoc, lastDecision, proposal, allowEmail]);
+
+  useEffect(() => { if (emailSummaryRequest) setSourceType('email'); }, [emailSummaryRequest]);
 
   const submit = event => {
     event.preventDefault();
-    if (!taskText.trim() || !selectedDoc || !documentsEnabled || isRunning || !canOperate) return;
-    onStartRun({ task: taskText.trim(), document_id: selectedDocId, allow_email: allowEmail, allowed_documents: [...new Set([selectedDocId, ...allowedDocuments])], allowed_recipients: recipientAllowlist.split(/[\n,;]/).map(value => value.trim()).filter(Boolean), max_emails: Number(maxEmails), required_subject: requiredSubject.trim() || null });
+    if (!taskText.trim() || isRunning || !canOperate) return;
+    if (sourceType === 'email' ? !selectedEmailId : (!selectedDoc || !documentsEnabled)) return;
+    onStartRun({ task: taskText.trim(), document_id: selectedDocId || docs[0]?.id || 'project_report', email_id: sourceType === 'email' ? selectedEmailId : null, allow_email: allowEmail, allowed_documents: [...new Set([selectedDocId, ...allowedDocuments].filter(Boolean))], allowed_recipients: recipientAllowlist.split(/[\n,;]/).map(value => value.trim()).filter(Boolean), max_emails: Number(maxEmails), required_subject: requiredSubject.trim() || null });
   };
   const downloadRun = () => { if (!currentRun) return; const blob = new Blob([JSON.stringify(currentRun, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `agent_run_${currentRun.run_id || 'result'}.json`; anchor.click(); URL.revokeObjectURL(url); };
 
@@ -54,14 +76,14 @@ export default function WorkspaceTab({ documents = [], currentRun, isRunning, on
       <aside className="workspace-left">
         <AvailableTools documents={docs} documentsEnabled={documentsEnabled} onDocumentsEnabledChange={setDocumentsEnabled} gmailStatus={gmailStatus} canOperate={canOperate} onConnectGmail={onConnectGmail} onDisconnectGmail={onDisconnectGmail}/>
         <ToolPermissions documentsEnabled={documentsEnabled} onDocumentsEnabledChange={setDocumentsEnabled} allowEmail={allowEmail} onAllowEmailChange={setAllowEmail} gmailStatus={gmailStatus} canOperate={canOperate} onConnectGmail={onConnectGmail} onDisconnectGmail={onDisconnectGmail}/>
-        <section className="surface-card compact-card"><div className="eyebrow">Document scope</div><h2>Allowed documents</h2><label className="field-label" htmlFor="workspace-document">Selected document</label><select id="workspace-document" className="field-control" value={selectedDocId} onChange={e => setSelectedDocId(e.target.value)}>{docs.map(doc => <option key={doc.id} value={doc.id}>{doc.title}</option>)}</select>
-          <div className="scope-checks">{docs.filter(doc => doc.id !== selectedDocId).map(doc => <label key={doc.id}><input type="checkbox" checked={allowedDocuments.includes(doc.id)} onChange={e => setAllowedDocuments(list => e.target.checked ? [...new Set([...list, doc.id])] : list.filter(id => id !== doc.id))}/><span>{doc.title}</span></label>)}</div>
+        <section className="surface-card compact-card"><div className="eyebrow">Task source</div><h2>Choose what to read</h2><label className="field-label" htmlFor="workspace-source">Source type</label><select id="workspace-source" className="field-control" value={sourceType} onChange={e => setSourceType(e.target.value)}><option value="document">Workspace document</option><option value="email">Gmail inbox email</option></select>
+          {sourceType === 'document' ? <><label className="field-label" htmlFor="workspace-document">Selected document</label><select id="workspace-document" className="field-control" value={selectedDocId} onChange={e => setSelectedDocId(e.target.value)}>{docs.map(doc => <option key={doc.id} value={doc.id}>{doc.title}</option>)}</select><div className="scope-checks">{docs.filter(doc => doc.id !== selectedDocId).map(doc => <label key={doc.id}><input type="checkbox" checked={allowedDocuments.includes(doc.id)} onChange={e => setAllowedDocuments(list => e.target.checked ? [...new Set([...list, doc.id])] : list.filter(id => id !== doc.id))}/><span>{doc.title}</span></label>)}</div></> : <><label className="field-label" htmlFor="workspace-email">Selected inbox email</label>{gmailStatus?.connected ? <select id="workspace-email" className="field-control" value={selectedEmailId} onChange={e => setSelectedEmailId(e.target.value)} disabled={emailLoading || inboxEmails.length === 0}><option value="">{emailLoading ? 'Loading inbox…' : inboxEmails.length ? 'Choose an email' : 'No inbox emails found'}</option>{inboxEmails.map(email => <option key={email.id} value={email.id}>{email.subject || '(No subject)'} — {email.senderName || email.sender}</option>)}</select> : <><p className="muted-copy">Connect Gmail with read access to summarize an inbox email.</p><button type="button" className="button-secondary" onClick={onConnectGmail} disabled={!canOperate}>Connect Gmail</button></>}</>}
         </section>
       </aside>
 
       <section className="workspace-center">
-        <form className="surface-card task-composer" onSubmit={submit}><label className="field-label" htmlFor="agent-task">What should the agent do?</label><div className="composer-row"><textarea id="agent-task" value={taskText} onChange={e => setTaskText(e.target.value)} rows={3} placeholder="Describe the task you want the agent to perform…" required/><button type="submit" className="button-primary run-button" disabled={!canOperate || isRunning || !taskText.trim() || !selectedDoc || !documentsEnabled}>{isRunning ? <RefreshCw size={16} className="spin"/> : <Play size={16}/>}<span>{isRunning ? 'Running' : canOperate ? 'Run task' : 'Operator access required'}</span></button></div>
-          <div className="composer-foot"><span><LockKeyhole size={13}/> Policy is set before reading external content</span><span>{selectedDoc?.title || 'No document selected'}</span></div>
+        <form className="surface-card task-composer" onSubmit={submit}><label className="field-label" htmlFor="agent-task">What should the agent do?</label><div className="composer-row"><textarea id="agent-task" value={taskText} onChange={e => setTaskText(e.target.value)} rows={3} placeholder="Describe the task you want the agent to perform…" required/><button type="submit" className="button-primary run-button" disabled={!canOperate || isRunning || !taskText.trim() || (sourceType === 'email' ? !selectedEmailId : (!selectedDoc || !documentsEnabled))}>{isRunning ? <RefreshCw size={16} className="spin"/> : <Play size={16}/>}<span>{isRunning ? 'Running' : canOperate ? 'Run task' : 'Operator access required'}</span></button></div>
+          <div className="composer-foot"><span><LockKeyhole size={13}/> Policy is set before reading external content</span><span>{sourceType === 'email' ? (inboxEmails.find(email => email.id === selectedEmailId)?.subject || 'No email selected') : selectedDoc?.title || 'No document selected'}</span></div>
         </form>
 
         <section className="surface-card execution-card"><div className="section-heading"><div><div className="eyebrow">Execution flow</div><h2>Agent activity</h2></div><div className="run-status"><i className={`state-dot ${isRunning ? 'is-warn' : currentRun ? 'is-good' : 'is-neutral'}`}/>{isRunning ? 'In progress' : currentRun?.status || 'Ready'}</div></div>

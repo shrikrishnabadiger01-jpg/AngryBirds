@@ -8,13 +8,14 @@ class TaskPolicy:
     allowed_recipients: frozenset[str]
     max_emails: int | None = 1
     required_subject: str | None = None
+    allowed_email_ids: frozenset[str] = frozenset()
 
 
 def check_action(policy, tool, arguments):
     if not isinstance(tool, str):
         return False, "Tool name must be text"
 
-    if tool not in {"read_doc", "send_email"}:
+    if tool not in {"read_doc", "read_email", "send_email"}:
         return False, "Unknown tool"
 
     if tool not in policy.allowed_tools:
@@ -37,6 +38,15 @@ def check_action(policy, tool, arguments):
 
         if doc_id not in policy.allowed_documents:
             return False, f"Document outside task scope: {doc_id}"
+
+    elif tool == "read_email":
+        if set(arguments) != {"email_id"}:
+            return False, "Invalid read_email arguments"
+        email_id = arguments["email_id"]
+        if not isinstance(email_id, str) or not email_id.strip() or len(email_id) > 200:
+            return False, "Email ID must be non-empty text"
+        if email_id not in policy.allowed_email_ids:
+            return False, "Email outside task scope"
 
     elif tool == "send_email":
         if set(arguments) != {"recipient", "subject", "body"}:

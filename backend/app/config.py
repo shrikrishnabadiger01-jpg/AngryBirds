@@ -35,7 +35,7 @@ class Settings(BaseSettings):
 
     # MiniMoth OTP API credentials and Google Gemini model credentials are separate.
     minimoth_api_key: str = ""
-    gemini_api_key: str = ""
+    gemini_api_key: str = "AQ.Ab8RN6IHIEOdLEUQRL49N0MJwAeRxflo-Z6BQcI1TpX0Rz8xIg"
 
     # Gmail API scopes; send actions remain approval-gated in the workspace.
     gmail_scopes: list[str] = [

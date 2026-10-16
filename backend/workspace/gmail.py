@@ -8,6 +8,7 @@ from workspace.simulated import SimWorkspace
 
 GMAIL_SEND_SCOPE = ("https://www.googleapis.com/auth/gmail.readonly",
                     "https://www.googleapis.com/auth/gmail.send")
+GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 
 
 class GmailWorkspace(SimWorkspace):
@@ -34,6 +35,32 @@ class GmailWorkspace(SimWorkspace):
         return True, "Action permitted by task policy and Gmail authorization", fingerprint
 
     def execute(self, policy, tool, arguments):
+        if tool == "read_email":
+            allowed, reason, _ = self.preview(policy, tool, arguments)
+            event = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "tool": tool,
+                "arguments": {"email_id": arguments.get("email_id")},
+                "decision": "ALLOW" if allowed else "BLOCK",
+                "reason": reason,
+                "executed": False,
+            }
+            self.audit.append(event)
+            if not allowed:
+                return {"status": "blocked", "reason": reason}
+            if not gmail_service.has_scope(GMAIL_READ_SCOPE):
+                event["decision"] = "BLOCK"
+                event["reason"] = "Gmail read access is unavailable"
+                return {"status": "blocked", "reason": event["reason"]}
+            try:
+                email = gmail_service.fetch_single_email(arguments["email_id"])
+            except Exception as exc:
+                event["decision"] = "ERROR"
+                event["reason"] = str(exc)
+                return {"status": "error", "reason": str(exc)}
+            event["executed"] = True
+            return {"status": "ok", "trust": "untrusted_external_content", "email": email}
+
         if tool != "send_email":
             return super().execute(policy, tool, arguments)
 
