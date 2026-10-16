@@ -26,14 +26,16 @@ class Settings(BaseSettings):
     secret_key: str = ""
     app_env: str = "development"
     auth_enabled: bool = False
+    auth_mode: str = "password"
+    auth_default_role: str = "operator"
     auth_users_json: str = ""
 
     # SQLite Database for server-side OAuth credentials and audit logs
     database_url: str = "sqlite:///./security_gate.db"
 
-    # Google Gemini API key. Set MINIMOTH_API_KEY or GEMINI_API_KEY in backend/.env.
-    # Keep credentials out of source code; an empty value enables simulation mode.
+    # MiniMoth OTP API credentials and Google Gemini model credentials are separate.
     minimoth_api_key: str = ""
+    gemini_api_key: str = ""
 
     # Gmail API scopes; send actions remain approval-gated in the workspace.
     gmail_scopes: list[str] = [
@@ -51,13 +53,7 @@ class Settings(BaseSettings):
 
     @property
     def has_gemini_key(self) -> bool:
-        """Backwards compatibility alias for has_minimoth_key."""
-        return self.has_minimoth_key
-
-    @property
-    def gemini_api_key(self) -> str:
-        """Backwards compatibility alias for minimoth_api_key."""
-        return self.minimoth_api_key
+        return bool(self.gemini_api_key.strip())
 
     @model_validator(mode="after")
     def restore_class_defaults_if_empty(self):
@@ -72,12 +68,20 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def require_production_access_controls(self):
+        if self.auth_mode not in {"password", "minimoth_otp"}:
+            raise ValueError("AUTH_MODE must be 'password' or 'minimoth_otp'")
+        if self.auth_default_role not in {"admin", "operator", "auditor"}:
+            raise ValueError("AUTH_DEFAULT_ROLE must be admin, operator, or auditor")
+        if self.auth_mode == "minimoth_otp" and self.auth_enabled and not self.minimoth_api_key.strip():
+            raise ValueError("MINIMOTH_API_KEY is required when MiniMoth OTP authentication is enabled")
+        if self.auth_enabled and len(self.secret_key) < 32:
+            raise ValueError("SECRET_KEY must contain at least 32 characters when authentication is enabled")
         if self.app_env.lower() == "production":
             if not self.auth_enabled:
                 raise ValueError("AUTH_ENABLED=true is required in production")
             if len(self.secret_key) < 32:
                 raise ValueError("SECRET_KEY must contain at least 32 characters in production")
-            if not self.auth_users_json.strip():
+            if self.auth_mode == "password" and not self.auth_users_json.strip():
                 raise ValueError("APP_USERS_JSON must configure at least one user in production")
         return self
 

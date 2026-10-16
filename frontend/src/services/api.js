@@ -29,6 +29,22 @@ export const api = {
     return handleResponse(res);
   },
 
+  async sendLoginOtp(phone) {
+    return handleResponse(await fetch(`${API_BASE}/auth/otp/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone }),
+    }));
+  },
+
+  async verifyLoginOtp(phone, code) {
+    return handleResponse(await fetch(`${API_BASE}/auth/otp/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, code }),
+    }));
+  },
+
   async logout() {
     const res = await fetch(`${API_BASE}/auth/logout`, { method: 'POST' });
     return handleResponse(res);

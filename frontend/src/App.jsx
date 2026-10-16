@@ -10,6 +10,7 @@ import HomeTab from './components/HomeTab';
 import DataSourcesTab from './components/DataSourcesTab';
 import SecurityCenterTab from './components/SecurityCenterTab';
 import { api } from './services/api';
+import { ArrowLeft, ArrowRight, CheckCircle2, LockKeyhole, ShieldCheck } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
@@ -28,11 +29,15 @@ export default function App() {
   const [errorToast, setErrorToast] = useState(null);
   const [successToast, setSuccessToast] = useState(null);
   const [showSetupModal, setShowSetupModal] = useState(false);
-  const [authState, setAuthState] = useState({ required: false, user: null });
+  const [authState, setAuthState] = useState({ required: false, mode: 'minimoth_otp', user: null });
   const [authLoading, setAuthLoading] = useState(true);
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [loginPhone, setLoginPhone] = useState('');
+  const [loginCode, setLoginCode] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [loginBusy, setLoginBusy] = useState(false);
   const canOperate = !authState.required || ['admin', 'operator'].includes(authState.user?.role);
 
   const showError = (msg) => {
@@ -91,13 +96,46 @@ export default function App() {
   const handleLogin = async (event) => {
     event.preventDefault();
     setLoginError('');
+    setLoginBusy(true);
     try {
       const user = await api.login(loginUsername, loginPassword);
-      setAuthState({ required: true, user });
+      setAuthState({ required: true, mode: 'password', user });
       setLoginPassword('');
       await loadInitialData();
     } catch (error) {
       setLoginError(error.message || 'Sign-in failed');
+    } finally {
+      setLoginBusy(false);
+    }
+  };
+
+  const handleSendLoginOtp = async (event) => {
+    event.preventDefault();
+    setLoginError('');
+    setLoginBusy(true);
+    try {
+      await api.sendLoginOtp(loginPhone);
+      setOtpSent(true);
+    } catch (error) {
+      setLoginError(error.message || 'Could not send a sign-in code');
+    } finally {
+      setLoginBusy(false);
+    }
+  };
+
+  const handleVerifyLoginOtp = async (event) => {
+    event.preventDefault();
+    setLoginError('');
+    setLoginBusy(true);
+    try {
+      const user = await api.verifyLoginOtp(loginPhone, loginCode);
+      setAuthState({ required: true, mode: 'minimoth_otp', user });
+      setLoginCode('');
+      await loadInitialData();
+    } catch (error) {
+      setLoginError(error.message || 'Code verification failed');
+    } finally {
+      setLoginBusy(false);
     }
   };
 
@@ -200,15 +238,46 @@ export default function App() {
     authLoading ? (
       <main className="main-content"><div className="glass-panel">Checking sign-in status…</div></main>
     ) : authState.required && !authState.user ? (
-      <main className="main-content" style={{ maxWidth: 480, margin: '12vh auto' }}>
-        <form className="glass-panel" onSubmit={handleLogin}>
-          <h1 style={{ color: '#fff', fontSize: 22, marginBottom: 8 }}>Sign in</h1>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: 20 }}>Use your organization account to access the security workspace.</p>
-          <label className="form-group"><span className="form-label">Username</span><input autoComplete="username" className="form-input" value={loginUsername} onChange={event => setLoginUsername(event.target.value)} required /></label>
-          <label className="form-group"><span className="form-label">Password</span><input autoComplete="current-password" type="password" className="form-input" value={loginPassword} onChange={event => setLoginPassword(event.target.value)} required /></label>
-          {loginError && <p role="alert" style={{ color: '#fb7185', marginBottom: 12 }}>{loginError}</p>}
-          <button type="submit" className="btn-approve">Sign in</button>
-        </form>
+      <main className="auth-page">
+        <section className="auth-story">
+          <div className="auth-brand"><span className="auth-brand-mark"><ShieldCheck size={21}/></span><span><strong>AI Guard</strong><small>SECURITY WORKSPACE</small></span></div>
+          <div className="auth-story-copy">
+            <div className="auth-kicker"><i/> SECURITY OPERATIONS</div>
+            <h2>Move work forward.<br/><em>Keep control.</em></h2>
+            <p>A considered workspace for reviewing documents, spotting risk, and approving sensitive actions.</p>
+            <div className="auth-points">
+              <div><span><CheckCircle2 size={16}/></span><div><strong>Identity, verified</strong><small>One-time phone verification through MiniMoth</small></div></div>
+              <div><span><CheckCircle2 size={16}/></span><div><strong>Actions, reviewed</strong><small>Approval stays with you for sensitive tasks</small></div></div>
+              <div><span><CheckCircle2 size={16}/></span><div><strong>Activity, recorded</strong><small>Decisions stay visible in your audit trail</small></div></div>
+            </div>
+          </div>
+          <div className="auth-story-footer"><span className="auth-live-dot"/> Your workspace is protected <span className="auth-footer-divider">·</span> AI Guard</div>
+        </section>
+
+        <section className="auth-main">
+          <div className="auth-card">
+            <div className="auth-card-meta"><span>WORKSPACE ACCESS</span><span className="auth-encrypted"><LockKeyhole size={13}/> SECURE SIGN-IN</span></div>
+            {authState.mode === 'minimoth_otp' && <div className="auth-progress" aria-label={otpSent ? 'Step 2 of 2' : 'Step 1 of 2'}><span className="complete"/><span className={otpSent ? 'complete' : ''}/><small>{otpSent ? 'STEP 2 OF 2' : 'STEP 1 OF 2'}</small></div>}
+            <h1>{authState.mode === 'minimoth_otp' && otpSent ? 'Check your phone' : 'Welcome back'}</h1>
+            <p className="auth-description">{authState.mode === 'minimoth_otp' ? otpSent ? `Enter the 6-digit code sent to ${loginPhone}.` : 'Enter your phone number and we’ll send you a secure sign-in code.' : 'Sign in with your organization account to continue to the security workspace.'}</p>
+
+            <form className="auth-form" onSubmit={authState.mode === 'minimoth_otp' ? otpSent ? handleVerifyLoginOtp : handleSendLoginOtp : handleLogin}>
+              {authState.mode === 'minimoth_otp' ? <>
+                {!otpSent ? <label className="auth-field"><span>PHONE NUMBER</span><input type="tel" autoComplete="tel" inputMode="tel" value={loginPhone} onChange={event => setLoginPhone(event.target.value)} placeholder="+91 98765 43210" required aria-label="Phone number" /><small>We’ll verify this number with a one-time code.</small></label> : <>
+                  <button type="button" className="auth-back-link" onClick={() => { setOtpSent(false); setLoginCode(''); setLoginError(''); }}><ArrowLeft size={14}/> Use a different number</button>
+                  <label className="auth-field"><span>VERIFICATION CODE</span><input className="auth-code-input" autoComplete="one-time-code" inputMode="numeric" value={loginCode} onChange={event => setLoginCode(event.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000" maxLength={6} required aria-label="Six-digit verification code" /></label>
+                </>}
+              </> : <>
+                <label className="auth-field"><span>USERNAME</span><input autoComplete="username" value={loginUsername} onChange={event => setLoginUsername(event.target.value)} placeholder="Your username" required /></label>
+                <label className="auth-field"><span>PASSWORD</span><input autoComplete="current-password" type="password" value={loginPassword} onChange={event => setLoginPassword(event.target.value)} placeholder="Your password" required /></label>
+              </>}
+              {loginError && <p className="auth-error" role="alert">{loginError}</p>}
+              <button type="submit" className="auth-submit" disabled={loginBusy || (authState.mode === 'minimoth_otp' && otpSent && loginCode.length !== 6)}>{loginBusy ? <span className="auth-spinner"/> : <>{authState.mode === 'minimoth_otp' ? otpSent ? 'Verify and continue' : 'Send sign-in code' : 'Sign in'}<ArrowRight size={16}/></>}</button>
+            </form>
+            <div className="auth-privacy"><LockKeyhole size={14}/><span>Your verification is handled securely. Your code is never stored in the browser.</span></div>
+          </div>
+          <footer className="auth-main-footer">© 2026 AI Guard <span>·</span> Secure access for your team</footer>
+        </section>
       </main>
     ) : (
     <div className="app-shell">

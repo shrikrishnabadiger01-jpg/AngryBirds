@@ -9,18 +9,12 @@ from core.security import TaskPolicy
 
 def get_minimoth_client():
     from app.config import settings
-    # 1. Check config.py directly (where user pastes into config.py)
-    api_key = getattr(settings, "minimoth_api_key", "")
+    # Model generation uses Gemini; MiniMoth credentials are exclusively for OTP auth.
+    api_key = getattr(settings, "gemini_api_key", "")
     if not api_key:
         env_path = Path(__file__).resolve().parent.parent / ".env"
         env_vals = dotenv_values(env_path) if env_path.exists() else {}
-        api_key = (
-            env_vals.get("MINIMOTH_API_KEY")
-            or os.environ.get("MINIMOTH_API_KEY")
-            or env_vals.get("GEMINI_API_KEY")
-            or os.environ.get("GEMINI_API_KEY")
-            or ""
-        )
+        api_key = env_vals.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY") or ""
     if not api_key or api_key.strip() == "":
         return None, None
     try:
@@ -204,11 +198,25 @@ def _steps(task: str, document_id: str, policy: TaskPolicy, workspace, require_a
 
         email_denied = False
         for _ in range(8):
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=messages,
-                config=config,
-            )
+            try:
+                response = client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=messages,
+                    config=config,
+                )
+            except Exception as exc:
+                error_text = str(exc)
+                if "API_KEY_INVALID" in error_text or "API key not valid" in error_text:
+                    if api_key.strip().lower().startswith("mm_"):
+                        raise RuntimeError(
+                            "MiniMoth API keys are used for phone OTP authentication. Set GEMINI_API_KEY to a "
+                            "Google Gemini key if you want live AI summaries."
+                        ) from exc
+                    raise RuntimeError(
+                        "Google rejected the model API key. This project currently sends model requests to Google's "
+                        "Gemini API; configure a valid Gemini key or connect the intended model provider."
+                    ) from exc
+                raise
 
             if not response.candidates or not response.candidates[0].content:
                 raise RuntimeError("MiniMoth returned no usable response.")

@@ -15,7 +15,7 @@ app = FastAPI(
     redoc_url=None if settings.app_env.lower() == "production" else "/redoc",
 )
 
-if settings.auth_enabled:
+if settings.auth_enabled and settings.auth_mode == "password":
     load_users()
 
 # Initialize SQLite database for credentials and audit logs
@@ -34,7 +34,7 @@ app.add_middleware(
 @app.middleware("http")
 async def access_control(request, call_next):
     path = request.url.path
-    public_paths = {"/", "/api/health", "/api/auth/session", "/api/auth/login", "/api/auth/logout", "/api/gmail/callback"}
+    public_paths = {"/", "/api/health", "/api/auth/session", "/api/auth/login", "/api/auth/otp/send", "/api/auth/otp/verify", "/api/auth/logout", "/api/gmail/callback"}
     user = None
     if settings.auth_enabled and request.method != "OPTIONS":
         user = read_session(request.cookies.get(COOKIE_NAME))
