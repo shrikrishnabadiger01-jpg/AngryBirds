@@ -266,6 +266,7 @@ export default function App() {
                 {!otpSent ? <label className="auth-field"><span>PHONE NUMBER</span><input type="tel" autoComplete="tel" inputMode="tel" value={loginPhone} onChange={event => setLoginPhone(event.target.value)} placeholder="+91 98765 43210" required aria-label="Phone number" /><small>We’ll verify this number with a one-time code.</small></label> : <>
                   <button type="button" className="auth-back-link" onClick={() => { setOtpSent(false); setLoginCode(''); setLoginError(''); }}><ArrowLeft size={14}/> Use a different number</button>
                   <label className="auth-field"><span>VERIFICATION CODE</span><input className="auth-code-input" type="text" autoComplete="one-time-code" autoFocus inputMode="numeric" pattern="[0-9]{6}" value={loginCode} onChange={event => setLoginCode(event.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="••••••" maxLength={6} required aria-label="Six-digit verification code" aria-describedby="auth-code-hint" /><small id="auth-code-hint">Enter all 6 digits from your text message.</small></label>
+                  <div className="auth-resend-row"><span>Didn't receive a code?</span><button type="button" onClick={handleSendLoginOtp} disabled={loginBusy}>{loginBusy ? 'Sending…' : 'Resend code'}</button></div>
                 </>}
               </> : <>
                 <label className="auth-field"><span>USERNAME</span><input autoComplete="username" value={loginUsername} onChange={event => setLoginUsername(event.target.value)} placeholder="Your username" required /></label>
@@ -276,7 +277,7 @@ export default function App() {
             </form>
             <div className="auth-privacy"><LockKeyhole size={14}/><span>Your verification is handled securely. Your code is never stored in the browser.</span></div>
           </div>
-          <footer className="auth-main-footer">© 2026 AI Guard <span>·</span> Secure access for your team</footer>
+          <footer className="auth-main-footer"><span className="auth-copyright">© 2026 AI Guard</span><span className="auth-powered"><span>Powered by</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 11.6C9.4 6.9 6.5 5.9 3.6 6.2c.5 3.9 2.5 6.5 7.2 7.4-3.8.2-5.8 2.1-6.2 5.7 3.4.1 6.2-1.4 7.4-5.1 1.2 3.7 4 5.2 7.4 5.1-.4-3.6-2.4-5.5-6.2-5.7 4.7-.9 6.7-3.5 7.2-7.4-2.9-.3-5.8.7-8.4 5.4Z"/><path d="M12 8.2v11.4M10.2 7.3 8.6 5.5m5.2 1.8 1.6-1.8"/></svg><strong>MiniMoth</strong></span></footer>
         </section>
       </main>
     ) : (
