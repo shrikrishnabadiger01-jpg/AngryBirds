@@ -90,6 +90,21 @@ export default function WorkspaceTab({ documents = [], currentRun, isRunning, on
   }, [canOperate, currentRun?.run_id, currentRun?.status, currentRun?.answer, currentRun?.audit, inboxEmails, emailSecurityRunId]);
 
   const events = currentRun?.audit || [];
+  const emailThreats = (() => {
+    const threats = events
+      .filter(event => event.tool === 'read_email' && event.security_decision === 'SUSPICIOUS')
+      .map(event => ({ subject: event.subject, threat_level: event.threat_level, reason: event.security_reason || event.reason }));
+    if (emailSecurityReview?.runId === currentRun?.run_id) {
+      threats.push(...emailSecurityReview.suspicious.map(email => ({ subject: email.subject, threat_level: email.threat_level, reason: email.reason })));
+    }
+    const seen = new Set();
+    return threats.filter(threat => {
+      const key = (threat.subject || '').trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  })();
   const lastDecision = events.length ? events[events.length - 1] : null;
   const proposal = currentRun?.pending_approval?.proposal || currentRun?.outbox?.[currentRun.outbox.length - 1] || null;
   const hasRead = events.some(event => event.tool === 'read_doc');
@@ -142,7 +157,7 @@ export default function WorkspaceTab({ documents = [], currentRun, isRunning, on
 
         <section className="surface-card result-card"><div className="section-heading"><div><div className="eyebrow">Agent response</div><h2>Task result</h2></div>{currentRun && <div className="button-row"><Decision value={currentRun.status}/><button className="button-quiet" onClick={downloadRun} type="button">Export JSON</button></div>}</div>
           {currentRun?.error && <div className="inline-error">{currentRun.error}</div>}
-          {currentRun?.answer ? <SafeMarkdown text={currentRun.answer}/> : currentRun?.status === 'awaiting_approval' ? <div className="inline-notice"><ShieldAlert size={16}/> The agent paused because the proposed email requires your approval.</div> : currentRun ? <p className="muted-copy">The run did not return a summary.</p> : <EmptyState title="Ready for a task" detail="Choose a permitted document, write a request, and run the agent."/>}
+          {currentRun?.answer ? <SafeMarkdown text={currentRun.answer} emailThreats={emailThreats}/> : currentRun?.status === 'awaiting_approval' ? <div className="inline-notice"><ShieldAlert size={16}/> The agent paused because the proposed email requires your approval.</div> : currentRun ? <p className="muted-copy">The run did not return a summary.</p> : <EmptyState title="Ready for a task" detail="Choose a permitted document, write a request, and run the agent."/>}
           {currentRun?.audit?.length > 0 && <details className="run-audit"><summary>Runtime decisions · {currentRun.audit.length}<ChevronDown size={14}/></summary><div className="table-scroll"><table className="data-table"><thead><tr><th>Decision</th><th>Action</th><th>Reason</th><th>Executed</th></tr></thead><tbody>{currentRun.audit.map((event, i) => <tr key={i}><td><Decision value={event.decision}/></td><td><code>{event.tool}</code></td><td>{event.reason}</td><td>{event.executed ? 'Yes' : 'No'}</td></tr>)}</tbody></table></div></details>}
           {currentRun?.outbox?.length > 0 && <div className="outbox-notice"><Check size={15}/><span>{currentRun.outbox.filter(item => item.status === 'sent').length} email(s) sent through Gmail.</span></div>}
         </section>
@@ -161,7 +176,7 @@ export default function WorkspaceTab({ documents = [], currentRun, isRunning, on
   </div>;
 }
 
-function SafeMarkdown({ text }) {
+function SafeMarkdown({ text, emailThreats = [] }) {
   const tokens = marked.lexer(text, { gfm: true });
   const renderInline = (parts, prefix) => (parts || []).map((part, index) => {
     const key = `${prefix}-${index}`;
@@ -194,7 +209,11 @@ function SafeMarkdown({ text }) {
     if (token.type === 'paragraph') return <p key={key}>{renderInline(token.tokens, key)}</p>;
     if (token.type === 'list') {
       const List = token.ordered ? 'ol' : 'ul';
-      return <List key={key}>{token.items.map((item, itemIndex) => <li key={`${key}-${itemIndex}`}>{renderListItem(item, `${key}-${itemIndex}`)}</li>)}</List>;
+      return <List key={key}>{token.items.map((item, itemIndex) => {
+        const itemText = (item.text || '').toLowerCase();
+        const threat = emailThreats.find(email => itemText.includes((email.subject || '').toLowerCase()));
+        return <li key={`${key}-${itemIndex}`}>{threat ? <div className="threat-marked-line"><span className={`threat-indicator threat-${threat.threat_level || 'medium'}`} title={threat.reason || 'This email was flagged by the security scan'}><AlertTriangle size={12}/><span>{(threat.threat_level || 'suspicious').toUpperCase()} THREAT</span></span><div>{renderListItem(item, `${key}-${itemIndex}`)}</div></div> : renderListItem(item, `${key}-${itemIndex}`)}</li>;
+      })}</List>;
     }
     if (token.type === 'code') return <pre key={key}><code>{token.text}</code></pre>;
     if (token.type === 'blockquote') return <blockquote key={key}>{(token.tokens || []).map((part, partIndex) => <p key={`${key}-${partIndex}`}>{renderInline(part.tokens, `${key}-${partIndex}`)}</p>)}</blockquote>;

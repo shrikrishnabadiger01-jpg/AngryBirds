@@ -277,6 +277,11 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .email-security-item > small { color: #785b21; font-size: 9px; }
 .email-security-item > p { margin: 0; color: var(--muted); font-size: 9px; line-height: 1.4; }
 .email-security-item > .email-security-summary { color: var(--ink); }
+.threat-marked-line { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 7px; }
+.threat-marked-line > div { flex: 1 1 260px; min-width: 0; }
+.threat-indicator { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; margin: 2px 0; padding: 3px 6px; border: 1px solid #e4b5a9; border-radius: 999px; color: #8a3127; background: #fff0eb; font-size: 9px; font-weight: 800; line-height: 1.2; letter-spacing: .035em; }
+.threat-indicator.threat-critical, .threat-indicator.threat-high { border-color: #dc9b91; color: #8b211a; background: #fce6e1; }
+.threat-indicator.threat-low { border-color: #e5c9c0; color: #785b21; background: #fff8e8; }
 
 .source-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 13px; margin-bottom: 14px; }
 .source-title { display: flex; align-items: center; gap: 10px; }

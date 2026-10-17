@@ -62,6 +62,7 @@ class GmailWorkspace(SimWorkspace):
             security = analyze_email_content(
                 email.get("subject", ""), email.get("body") or email.get("snippet", "")
             )
+            event["subject"] = email.get("subject", "(No subject)")
             event["action_decision"] = "ALLOW"
             event["security_decision"] = (
                 "SUSPICIOUS" if security["decision"] != "ALLOW" else "ALLOW"
