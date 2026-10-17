@@ -17,8 +17,8 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # Google OAuth 2.0 Gmail access
-    google_client_id: str = "280268833822-00m7mdod6anu91htdu6rucgpc5iskij4.apps.googleusercontent.com"
-    google_client_secret: str = "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"
+    google_client_id: str = ""
+    google_client_secret: str = ""
     google_redirect_uri: str = "http://localhost:8000/api/gmail/callback"
 
     # App URLs
@@ -54,17 +54,6 @@ class Settings(BaseSettings):
     @property
     def has_gemini_key(self) -> bool:
         return bool(self.gemini_api_key.strip())
-
-    @model_validator(mode="after")
-    def restore_class_defaults_if_empty(self):
-        """Restore OAuth defaults if environment files contain empty values."""
-        for field_name in ("google_client_id", "google_client_secret"):
-            val = getattr(self, field_name, "")
-            if not val or not str(val).strip():
-                default_val = self.__class__.model_fields[field_name].default
-                if default_val and str(default_val).strip():
-                    setattr(self, field_name, str(default_val).strip())
-        return self
 
     @model_validator(mode="after")
     def require_production_access_controls(self):

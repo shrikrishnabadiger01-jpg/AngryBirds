@@ -40,15 +40,22 @@ def get_stored_credentials() -> Tuple[Optional[Credentials], Optional[str]]:
 
         scopes = json.loads(user_cred.scopes) if user_cred.scopes else settings.gmail_scopes
 
-        creds = Credentials(
-            token=reveal(user_cred.token),
-            refresh_token=reveal(user_cred.refresh_token),
-            token_uri=user_cred.token_uri,
-            client_id=user_cred.client_id,
-            client_secret=reveal(user_cred.client_secret),
-            scopes=scopes,
-            expiry=user_cred.expiry,
-        )
+        try:
+            creds = Credentials(
+                token=reveal(user_cred.token),
+                refresh_token=reveal(user_cred.refresh_token),
+                token_uri=user_cred.token_uri,
+                client_id=user_cred.client_id,
+                client_secret=reveal(user_cred.client_secret),
+                scopes=scopes,
+                expiry=user_cred.expiry,
+            )
+        except RuntimeError as exc:
+            # A SECRET_KEY change makes old encrypted tokens unusable. Treat the
+            # connection as disconnected so health/status endpoints stay usable
+            # and a fresh OAuth flow can replace the stale database record.
+            print(f"[IgnisGuard] Stored Gmail credentials cannot be decrypted: {exc}")
+            return None, None
 
         # Upgrade existing plaintext records on first access after production encryption is enabled.
         if settings.secret_key and any(not is_protected(value) for value in (user_cred.token, user_cred.refresh_token, user_cred.client_secret)):
