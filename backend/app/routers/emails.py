@@ -6,6 +6,7 @@ Treats all email content strictly as untrusted external data.
 
 import json
 import datetime
+import asyncio
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -14,8 +15,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db, AuditLog
 from app.auth import require_roles
 from app.services import gmail_service
-from core.inspector import inspect_content
-from core.phishing import inspect_phishing_indicators
+from app.services.email_summary import summarize_suspicious_email
+from core.email_security import analyze_email_content
 
 router = APIRouter(prefix="/api/emails", tags=["Emails"])
 
@@ -70,43 +71,19 @@ async def analyze_email_security(req: AnalyzeEmailRequest, db: Session = Depends
     Inspects for prompt injection, phishing triggers, and runtime policy violations.
     Records every security decision in the SQLite AuditLog.
     """
-    text_to_scan = f"{req.subject}\n\n{req.body}"
+    analysis = analyze_email_content(req.subject, req.body)
+    decision = analysis["decision"]
+    threat_level = analysis["threat_level"]
+    reason = analysis["reason"]
+    injection_findings = analysis["prompt_injection_signals"]
+    indicators = analysis["indicators"]
 
-    # 1. Prompt Injection Pattern Inspector
-    injection_findings = inspect_content(text_to_scan)
-
-    # 2. Phishing & Malicious Indicator Rules
-    indicators = inspect_phishing_indicators(text_to_scan)
-
-    # Prompt Injection & Directive Overrides
-    for finding in injection_findings:
-        indicators.append({
-            "type": "PROMPT_INJECTION",
-            "description": f"Directive detected: '{finding['signal']}' in matched text: '{finding['matched_text']}'",
-            "matched_text": finding["matched_text"],
-        })
-
-    # 3. Decision Determination
-    has_injection = len(injection_findings) > 0
-    has_phishing = any(i["type"] == "CREDENTIAL_PHISHING" for i in indicators)
-    has_suspicious_url = any(i["type"] == "SUSPICIOUS_LINK" for i in indicators)
-
-    if has_injection:
-        decision = "BLOCK"
-        threat_level = "critical"
-        reason = "Blocked: High-risk prompt injection signals detected aiming to hijack agent execution."
-    elif has_phishing or has_suspicious_url:
-        decision = "BLOCK"
-        threat_level = "high"
-        reason = "Blocked: Malicious phishing / credential harvesting indicators detected."
-    elif len(indicators) > 0:
-        decision = "SUSPICIOUS"
-        threat_level = "medium"
-        reason = "Warning: Moderate risk indicators identified. Treat with caution."
-    else:
-        decision = "ALLOW"
-        threat_level = "safe"
-        reason = "No malicious directives or prompt injection patterns detected."
+    # Summarize suspicious mail as untrusted content; the model cannot act on it.
+    email_summary = None
+    if decision != "ALLOW" or threat_level != "safe":
+        email_summary = await asyncio.to_thread(
+            summarize_suspicious_email, req.subject, req.body
+        )
 
     # 4. Save Audit Log to SQLite
     try:
@@ -133,6 +110,7 @@ async def analyze_email_security(req: AnalyzeEmailRequest, db: Session = Depends
         "decision": decision,
         "threat_level": threat_level,
         "reason": reason,
+        "summary": email_summary,
         "prompt_injection_signals": injection_findings,
         "indicators": indicators,
         "scanned_at": datetime.datetime.utcnow().isoformat() + "Z",

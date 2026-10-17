@@ -269,6 +269,14 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .approval-lock { color: var(--muted); font-size: 9px; line-height: 1.45; }
 .button-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .security-check > .muted-copy { margin: 2px 0; }
+.email-security-review { display: grid; gap: 7px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.email-security-review > strong { color: var(--ink); font-size: 11px; }
+.email-security-review > .muted-copy { margin: 0; }
+.email-security-item { display: grid; gap: 4px; padding: 8px; border: 1px solid #e5c9c0; border-radius: 6px; background: #fff4ef; overflow-wrap: anywhere; }
+.email-security-item > strong { color: #722f24; font-size: 10px; }
+.email-security-item > small { color: #785b21; font-size: 9px; }
+.email-security-item > p { margin: 0; color: var(--muted); font-size: 9px; line-height: 1.4; }
+.email-security-item > .email-security-summary { color: var(--ink); }
 
 .source-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 13px; margin-bottom: 14px; }
 .source-title { display: flex; align-items: center; gap: 10px; }

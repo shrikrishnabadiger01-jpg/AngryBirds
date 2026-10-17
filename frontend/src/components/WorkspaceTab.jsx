@@ -19,6 +19,8 @@ export default function WorkspaceTab({ documents = [], currentRun, isRunning, on
   const [inboxEmails, setInboxEmails] = useState([]);
   const [selectedEmailIds, setSelectedEmailIds] = useState([]);
   const [emailLoading, setEmailLoading] = useState(false);
+  const [emailSecurityReview, setEmailSecurityReview] = useState(null);
+  const [emailSecurityRunId, setEmailSecurityRunId] = useState('');
   const docs = documents.filter(doc => !doc.is_confidential);
   const emailSummaryRequest = /\b(?:summari[sz]e|summary)\b.{0,40}\b(?:emails?|inboxes?|messages?)\b|\b(?:emails?|inboxes?|messages?)\b.{0,40}\b(?:summari[sz]e|summary)\b/i.test(taskText);
   useEffect(() => { if (docs.length > 0) setDocumentsEnabled(true); }, [docs.length]);
@@ -49,6 +51,43 @@ export default function WorkspaceTab({ documents = [], currentRun, isRunning, on
       setSelectedEmailIds(inboxEmails.slice(0, count).map(email => email.id));
     }
   }, [emailSummaryRequest, taskText, inboxEmails]);
+
+  useEffect(() => {
+    if (!canOperate || currentRun?.status !== 'completed' || !currentRun?.answer || !currentRun?.run_id || emailSecurityRunId === currentRun.run_id) return;
+    const emailIds = [...new Set((currentRun.audit || [])
+      .filter(event => event.tool === 'read_email' && event.executed && event.arguments?.email_id)
+      .map(event => event.arguments.email_id))];
+    const analyzedEmails = emailIds.map(id => ({ id, email: inboxEmails.find(item => item.id === id) })).filter(item => item.email);
+    if (emailIds.length === 0) return;
+    setEmailSecurityRunId(currentRun.run_id);
+    if (analyzedEmails.length === 0) {
+      setEmailSecurityReview({ runId: currentRun.run_id, loading: false, suspicious: [], failed: true, checkedCount: 0 });
+      return;
+    }
+    setEmailSecurityReview({ runId: currentRun.run_id, loading: true, suspicious: [], failed: false, checkedCount: 0 });
+    Promise.all(analyzedEmails.map(async ({ id, email }) => {
+      try {
+        return await api.analyzeEmail({
+          email_id: id,
+          subject: email.subject || '',
+          body: email.body || email.snippet || '',
+          sender: email.sender || 'unknown@domain.com',
+          recipient: email.recipient,
+        });
+      } catch {
+        return null;
+      }
+    })).then(results => {
+      const validResults = results.filter(Boolean);
+      setEmailSecurityReview({
+        runId: currentRun.run_id,
+        loading: false,
+        failed: validResults.length !== emailIds.length,
+        checkedCount: validResults.length,
+        suspicious: validResults.filter(result => result.decision !== 'ALLOW' || result.threat_level !== 'safe'),
+      });
+    });
+  }, [canOperate, currentRun?.run_id, currentRun?.status, currentRun?.answer, currentRun?.audit, inboxEmails, emailSecurityRunId]);
 
   const events = currentRun?.audit || [];
   const lastDecision = events.length ? events[events.length - 1] : null;
@@ -112,7 +151,9 @@ export default function WorkspaceTab({ documents = [], currentRun, isRunning, on
       <aside className="workspace-right">
         <section className="surface-card compact-card"><div className="section-heading"><div><div className="eyebrow">Current task</div><h2>Task options</h2></div><Activity size={17}/></div><p className="task-summary">{taskText || 'No task entered yet.'}</p><div className="policy-switch"><label><input type="checkbox" checked={allowEmail} onChange={e => setAllowEmail(e.target.checked)} disabled={!gmailStatus?.can_send}/><span>Allow email sending</span></label><small>{!gmailStatus?.can_send ? (gmailStatus?.connected ? 'Reconnect Gmail with the send permission under Tool Permissions' : 'Connect Gmail with send access under Tool Permissions first') : 'Requires an allowed recipient and your approval before sending'}</small></div>{allowEmail && <div className="policy-fields"><label className="field-label" htmlFor="allowed-recipients">Allowed recipients</label><textarea id="allowed-recipients" className="field-control" rows={2} value={recipientAllowlist} onChange={e => setRecipientAllowlist(e.target.value)} placeholder="name@example.com"/><label className="field-label" htmlFor="email-cap">Email limit</label><input id="email-cap" className="field-control" type="number" min="0" max="10" value={maxEmails} onChange={e => setMaxEmails(e.target.value)}/><label className="field-label" htmlFor="subject-rule">Required subject</label><input id="subject-rule" className="field-control" maxLength="200" value={requiredSubject} onChange={e => setRequiredSubject(e.target.value)} placeholder="Optional exact subject"/></div>}</section>
 
-        <section className="surface-card compact-card security-check"><div className="section-heading"><div><div className="eyebrow">Security check</div><h2>{selectedDoc?.findings_count ? 'Review signals' : 'Document inspection'}</h2></div>{selectedDoc?.findings_count ? <AlertTriangle size={17}/> : <ShieldCheck size={17}/>}</div>{lastDecision ? <div className="decision-summary"><Decision value={lastDecision.decision}/><p>{lastDecision.reason}</p></div> : <p className="muted-copy">{selectedDoc?.findings_count ? `${selectedDoc.findings_count} pattern signal(s) found in ${selectedDoc.title}.` : 'No saved action decision for this task yet.'}</p>}{selectedDoc?.findings?.length > 0 && <details className="evidence-details"><summary>Matched evidence ({selectedDoc.findings.length})</summary>{selectedDoc.findings.map((finding, i) => <p key={i}><strong>{finding.signal}</strong><code>{finding.matched_text}</code></p>)}</details>}</section>
+        <section className="surface-card compact-card security-check"><div className="section-heading"><div><div className="eyebrow">Security check</div><h2>{emailSecurityReview?.runId === currentRun?.run_id ? 'Email security results' : selectedDoc?.findings_count ? 'Review signals' : 'Document inspection'}</h2></div>{selectedDoc?.findings_count || emailSecurityReview?.suspicious?.length ? <AlertTriangle size={17}/> : <ShieldCheck size={17}/>}</div>{lastDecision ? <div className="decision-summary"><Decision value={lastDecision.decision}/><p>{lastDecision.reason}</p></div> : <p className="muted-copy">{selectedDoc?.findings_count ? `${selectedDoc.findings_count} pattern signal(s) found in ${selectedDoc.title}.` : 'No saved action decision for this task yet.'}</p>}{selectedDoc?.findings?.length > 0 && <details className="evidence-details"><summary>Matched evidence ({selectedDoc.findings.length})</summary>{selectedDoc.findings.map((finding, i) => <p key={i}><strong>{finding.signal}</strong><code>{finding.matched_text}</code></p>)}</details>}
+          {emailSecurityReview && emailSecurityReview.runId === currentRun?.run_id && <div className="email-security-review"><div className="eyebrow">Emails in this summary</div><strong>{emailSecurityReview.loading ? 'Checking selected emails…' : `Suspicious emails · ${emailSecurityReview.suspicious.length}`}</strong>{emailSecurityReview.loading ? <p className="muted-copy">Reviewing the selected messages for phishing and prompt injection.</p> : emailSecurityReview.suspicious.length === 0 && emailSecurityReview.failed && emailSecurityReview.checkedCount === 0 ? <p className="muted-copy">Could not analyze the selected emails.</p> : emailSecurityReview.suspicious.length === 0 ? <p className="muted-copy">No suspicious emails found among {emailSecurityReview.checkedCount} analyzed email(s).</p> : emailSecurityReview.suspicious.map((email, index) => <div className="email-security-item" key={email.email_id || index}><strong>{email.subject || '(No subject)'}</strong><small>{email.sender} · {email.threat_level?.toUpperCase()}</small><p className="email-security-summary"><strong>Summary:</strong> {email.summary || 'AI summary unavailable. The security warning is still available below.'}</p><p>{email.reason}</p>{(email.indicators || []).map((indicator, findingIndex) => <small key={findingIndex}>{indicator.description}</small>)}</div>)}{emailSecurityReview.failed && emailSecurityReview.checkedCount > 0 && <small>Some selected emails could not be checked.</small>}</div>}
+        </section>
 
         <section className="surface-card compact-card draft-card"><div className="section-heading"><div><div className="eyebrow">Email action</div><h2>{proposal ? 'Proposal preview' : 'No email proposed'}</h2></div><Mail size={17}/></div>{proposal ? <><div className="draft-field"><span>To</span><strong>{proposal.recipient || 'Not recorded'}</strong></div><div className="draft-field"><span>Subject</span><strong>{proposal.subject || 'Not recorded'}</strong></div><div className="draft-body">{proposal.body || 'No body recorded.'}</div>{currentRun?.status === 'awaiting_approval' && <><p className="approval-lock">Review the exact message before allowing Gmail to send it.</p><div className="button-row"><button type="button" className="button-secondary" disabled={!canOperate || isRunning} onClick={() => onApproveProposal(currentRun.run_id, currentRun.pending_approval.token, false)}><X size={14}/> Deny</button><button type="button" className="button-primary" disabled={!canOperate || isRunning} onClick={() => onApproveProposal(currentRun.run_id, currentRun.pending_approval.token, true)}><Send size={14}/> Approve and send</button></div></>}</> : <p className="muted-copy">A proposed email appears here when you enable email sending and the agent prepares a message. Gmail sends only after you approve it.</p>}</section>
       </aside>

@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 
 from app.services import gmail_service
+from core.email_security import analyze_email_content
 from workspace.simulated import SimWorkspace
 
 GMAIL_SEND_SCOPE = ("https://www.googleapis.com/auth/gmail.readonly",
@@ -58,8 +59,30 @@ class GmailWorkspace(SimWorkspace):
                 event["decision"] = "ERROR"
                 event["reason"] = str(exc)
                 return {"status": "error", "reason": str(exc)}
+            security = analyze_email_content(
+                email.get("subject", ""), email.get("body") or email.get("snippet", "")
+            )
+            event["action_decision"] = "ALLOW"
+            event["security_decision"] = (
+                "SUSPICIOUS" if security["decision"] != "ALLOW" else "ALLOW"
+            )
+            event["threat_level"] = security["threat_level"]
+            event["security_reason"] = security["reason"]
+            event["indicators"] = security["indicators"]
+            event["prompt_injection_signals"] = security["prompt_injection_signals"]
+            event["reason"] = (
+                "Read permitted for inspection. " + security["reason"]
+                if security["decision"] != "ALLOW"
+                else "Read permitted; no known phishing or prompt-injection signals detected."
+            )
+            event["decision"] = event["security_decision"]
             event["executed"] = True
-            return {"status": "ok", "trust": "untrusted_external_content", "email": email}
+            return {
+                "status": "ok",
+                "trust": "untrusted_external_content",
+                "email": email,
+                "security": security,
+            }
 
         if tool != "send_email":
             return super().execute(policy, tool, arguments)
