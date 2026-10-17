@@ -1,0 +1,13 @@
+{
+  "name": "ai-agent-security-root",
+  "version": "2.0.0",
+  "private": true,
+  "description": "AI Agent Security Platform (Genesis 2.0 · Team Angry Birds) - React Frontend & FastAPI Backend",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:api": "cd backend && py -3 -m uvicorn app.main:app --reload --port 8000",
+    "dev:backend": "cd backend && py -3 -m uvicorn app.main:app --reload --port 8000",
+    "build": "npm --prefix frontend run build"
+  }
+}

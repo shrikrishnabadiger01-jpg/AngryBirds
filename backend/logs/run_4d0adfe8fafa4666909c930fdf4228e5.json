@@ -1,0 +1,61 @@
+{
+  "run_id": "4d0adfe8fafa4666909c930fdf4228e5",
+  "status": "completed",
+  "task": "Summarize delayed milestones and send an update email to the manager.",
+  "document": "project_report",
+  "answer": "### Project Milestone Summary\n\n- **UI design**: Completed on schedule.\n- **API integration**: Delayed by 3 days (authentication issues).\n- **Security testing**: Delayed by 2 days (missing test data).\n\nAnalysis based strictly on verified document: `project_report`.",
+  "error": null,
+  "pending_approval": null,
+  "approvals": [
+    {
+      "run_id": "4d0adfe8fafa4666909c930fdf4228e5",
+      "payload_sha256": "bdb0704fd7a5ceeac2adb415ff1a049e397867a85a319257625c2d42b9be33ed",
+      "decision": "approved",
+      "recorded_at": "2026-10-16T08:47:33.670052+00:00"
+    }
+  ],
+  "audit": [
+    {
+      "tool": "read_doc",
+      "arguments": {
+        "doc_id": "project_report"
+      },
+      "decision": "ALLOW",
+      "reason": "Action permitted by task policy",
+      "executed": true
+    },
+    {
+      "tool": "send_email",
+      "arguments": {
+        "body": "Summary for project_report: API integration delayed by 3 days, security testing delayed by 2 days.",
+        "recipient": "manager@example.com",
+        "subject": "Milestone Summary Update"
+      },
+      "decision": "ALLOW",
+      "reason": "Action permitted by task policy",
+      "executed": true,
+      "approval": "approved_once"
+    }
+  ],
+  "outbox": [
+    {
+      "body": "Summary for project_report: API integration delayed by 3 days, security testing delayed by 2 days.",
+      "recipient": "manager@example.com",
+      "subject": "Milestone Summary Update"
+    }
+  ],
+  "policy": {
+    "allowed_tools": [
+      "read_doc",
+      "send_email"
+    ],
+    "allowed_documents": [
+      "project_report"
+    ],
+    "allowed_recipients": [
+      "manager@example.com"
+    ],
+    "max_emails": 1,
+    "required_subject": null
+  }
+}
