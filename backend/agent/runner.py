@@ -8,15 +8,13 @@ from core.security import TaskPolicy
 
 def get_minimoth_client():
     from app.config import settings
-    # 1. Check config.py directly (where user pastes into config.py)
-    api_key = getattr(settings, "minimoth_api_key", "")
+    # Gemini is used for email-security analysis; MiniMoth is reserved for OTP auth.
+    api_key = getattr(settings, "gemini_api_key", "")
     if not api_key:
         env_path = Path(__file__).resolve().parent.parent / ".env"
         env_vals = dotenv_values(env_path) if env_path.exists() else {}
         api_key = (
-            env_vals.get("MINIMOTH_API_KEY")
-            or os.environ.get("MINIMOTH_API_KEY")
-            or env_vals.get("GEMINI_API_KEY")
+            env_vals.get("GEMINI_API_KEY")
             or os.environ.get("GEMINI_API_KEY")
             or ""
         )
@@ -31,7 +29,7 @@ def get_minimoth_client():
         )
         return client, api_key
     except Exception as e:
-        print(f"Failed to initialize MiniMoth client: {e}")
+        print(f"Failed to initialize Gemini client: {e}")
         return None, None
 
 

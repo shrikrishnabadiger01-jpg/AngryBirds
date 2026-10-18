@@ -1,0 +1,23 @@
+{
+  "run_id": "0e4b1e36d5564727b95f2a595ea109bd",
+  "status": "error",
+  "task": "summary of my  5 emails",
+  "document": "project_report",
+  "answer": null,
+  "error": "400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key not valid. Please pass a valid API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key not valid. Please pass a valid API key.'}]}}",
+  "pending_approval": null,
+  "approvals": [],
+  "audit": [],
+  "outbox": [],
+  "policy": {
+    "allowed_tools": [
+      "read_doc"
+    ],
+    "allowed_documents": [
+      "project_report"
+    ],
+    "allowed_recipients": [],
+    "max_emails": 0,
+    "required_subject": null
+  }
+}

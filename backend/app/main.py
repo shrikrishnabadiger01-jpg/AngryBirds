@@ -34,7 +34,11 @@ app.add_middleware(
 @app.middleware("http")
 async def access_control(request, call_next):
     path = request.url.path
-    public_paths = {"/", "/api/health", "/api/auth/session", "/api/auth/login", "/api/auth/logout", "/api/gmail/callback"}
+    public_paths = {
+        "/", "/api/health", "/api/auth/session", "/api/auth/login",
+        "/api/auth/logout", "/api/auth/otp/send", "/api/auth/otp/verify",
+        "/api/gmail/callback",
+    }
     user = None
     if settings.auth_enabled and request.method != "OPTIONS":
         user = read_session(request.cookies.get(COOKIE_NAME))

@@ -95,6 +95,65 @@ AI-Guard/
 
 ## Getting Started
 
+## Phone OTP sign-in
+
+IgnisGuard uses `MINIMOTH_API_KEY` only to send and verify phone OTPs. Gemini email
+security analysis reads only `GEMINI_API_KEY`. The MiniMoth key is sent only by the
+FastAPI backend.
+
+In `backend/.env`, set:
+
+```env
+AUTH_ENABLED=true
+APP_ENV=development
+SECRET_KEY=replace-with-at-least-32-random-characters
+MINIMOTH_API_KEY=your-minimoth-project-key
+GEMINI_API_KEY=your-gemini-api-key
+FRONTEND_URL=http://localhost:5173
+```
+
+Do not overwrite an existing `.env` file. For production, use HTTPS, set
+`APP_ENV=production`, use a randomly generated secret of at least 32 characters, and
+set `FRONTEND_URL` to the exact HTTPS origin serving the frontend.
+
+If your existing `backend/.env` has a Gemini key stored under the legacy
+`MINIMOTH_API_KEY` variable, move that value to `GEMINI_API_KEY` and put the MiniMoth
+project key in `MINIMOTH_API_KEY`. Edit the file locally; the app setup does not
+overwrite it.
+
+### Windows setup and run
+
+From PowerShell at the repository root:
+
+```powershell
+cd backend
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+py -m pip install -r requirements.txt
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+notepad .env
+py -m uvicorn app.main:app --reload --app-dir . --port 8000
+```
+
+In a second PowerShell window:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open the Vite URL shown in the terminal (normally `http://localhost:5173`). For the
+automated authentication checks, open a third terminal, activate the backend
+environment, change to `backend`, and run:
+
+```powershell
+py -m unittest discover -s tests -v
+```
+
+The OTP checks mock MiniMoth responses, so they do not send a real SMS or require
+MiniMoth credits. A live login requires a valid OTP API key and phone number.
+
 ### Prerequisites
 
 - Python installed

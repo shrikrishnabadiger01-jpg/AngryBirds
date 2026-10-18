@@ -7,12 +7,16 @@ import base64
 import hashlib
 import hmac
 import json
+import re
 import secrets
 import sys
 import time
+from collections import defaultdict, deque
+from threading import Lock
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
+import httpx
 
 from app.config import settings
 
@@ -20,6 +24,17 @@ router = APIRouter(prefix="/api/auth", tags=["authentication"])
 COOKIE_NAME = "app_session"
 SESSION_SECONDS = 8 * 60 * 60
 ROLES = {"admin", "operator", "auditor"}
+MINIMOTH_API = "https://api.minimoth.dev/v1/otp"
+OTP_TTL_SECONDS = 10 * 60
+OTP_RESEND_SECONDS = 60
+OTP_SEND_LIMIT = 3
+OTP_SEND_WINDOW = 10 * 60
+OTP_VERIFY_LIMIT = 5
+OTP_VERIFY_WINDOW = 60 * 60
+_otp_lock = Lock()
+_otp_challenges: dict[str, dict] = {}
+_otp_send_times: dict[str, deque] = defaultdict(deque)
+_otp_verify_times: dict[str, deque] = defaultdict(deque)
 
 
 def _b64(data: bytes) -> str:
@@ -82,6 +97,11 @@ def read_session(token: str | None):
         payload = json.loads(_unb64(body))
         if payload.get("exp", 0) <= int(time.time()) or payload.get("role") not in ROLES:
             return None
+        if payload.get("auth_type") == "minimoth_otp":
+            phone = payload.get("phone", "")
+            if not re.fullmatch(r"\+[1-9]\d{7,14}", phone):
+                return None
+            return {"username": "Phone user", "role": "admin"}
         account = load_users().get(payload.get("username"))
         if (
             not account
@@ -109,26 +129,19 @@ def _make_session(username: str, account: dict):
     return f"{body}.{_b64(signature)}"
 
 
-class LoginRequest(BaseModel):
-    username: str = Field(min_length=1, max_length=120)
-    password: str = Field(min_length=1, max_length=1024)
+def _make_otp_session(phone: str):
+    payload = {
+        "auth_type": "minimoth_otp",
+        "phone": phone,
+        "role": "admin",
+        "exp": int(time.time()) + SESSION_SECONDS,
+    }
+    body = _b64(json.dumps(payload, separators=(",", ":")).encode())
+    signature = hmac.new(settings.secret_key.encode(), body.encode(), hashlib.sha256).digest()
+    return f"{body}.{_b64(signature)}"
 
 
-@router.get("/session")
-def get_session(request: Request):
-    user = getattr(request.state, "user", None)
-    return {"required": settings.auth_enabled, "user": user if settings.auth_enabled else None}
-
-
-@router.post("/login")
-def login(req: LoginRequest, response: Response):
-    users = load_users()
-    account = users.get(req.username)
-    encoded_hash = account.get("password_hash", "") if account else hash_password("invalid-user")
-    valid = _verify_password(req.password, encoded_hash)
-    if not account or not valid:
-        raise HTTPException(status_code=401, detail="Invalid username or password")
-    token = _make_session(req.username, account)
+def _session_cookie(response: Response, token: str):
     response.set_cookie(
         COOKIE_NAME,
         token,
@@ -138,6 +151,159 @@ def login(req: LoginRequest, response: Response):
         samesite="strict",
         path="/",
     )
+
+
+def _clean_times(times: deque, now: float, window: int):
+    while times and times[0] <= now - window:
+        times.popleft()
+
+
+def _check_phone(phone: str):
+    normalized = phone.strip()
+    if not re.fullmatch(r"\+[1-9]\d{7,14}", normalized):
+        raise HTTPException(status_code=422, detail="Enter a valid phone number with country code")
+    return normalized
+
+
+def _minimoth_request(path: str, payload: dict):
+    if not settings.has_minimoth_otp_key:
+        raise HTTPException(status_code=503, detail="Phone sign-in is not configured")
+    try:
+        result = httpx.post(
+            f"{MINIMOTH_API}/{path}",
+            headers={"X-Api-Key": settings.minimoth_api_key.strip()},
+            json=payload,
+            timeout=12.0,
+        )
+    except httpx.TimeoutException as exc:
+        raise HTTPException(status_code=504, detail="Phone verification service timed out. Please retry.") from exc
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail="Phone verification service is unavailable. Please retry.") from exc
+
+    if not result.is_success:
+        if result.status_code == 429:
+            raise HTTPException(status_code=429, detail="Too many attempts. Please wait before trying again.")
+        if path == "verify" and result.status_code in (400, 401, 404, 410, 422):
+            raise HTTPException(status_code=401, detail="That code is invalid or expired. Check it and try again.")
+        if path == "send" and result.status_code == 402:
+            raise HTTPException(status_code=503, detail="OTP delivery is temporarily unavailable. Please contact support.")
+        raise HTTPException(status_code=502, detail="Phone verification could not be completed. Please retry.")
+    try:
+        data = result.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="Phone verification returned an invalid response.") from exc
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=502, detail="Phone verification returned an invalid response.")
+    return data
+
+
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=120)
+    password: str = Field(min_length=1, max_length=1024)
+
+
+class OtpSendRequest(BaseModel):
+    phone: str = Field(min_length=8, max_length=16)
+
+
+class OtpVerifyRequest(BaseModel):
+    phone: str = Field(min_length=8, max_length=16)
+    code: str = Field(pattern=r"^\d{6}$")
+
+
+@router.get("/session")
+def get_session(request: Request):
+    user = getattr(request.state, "user", None)
+    return {
+        "required": settings.auth_enabled,
+        "method": "otp" if settings.has_minimoth_otp_key else "password",
+        "user": user if settings.auth_enabled else None,
+    }
+
+
+@router.post("/otp/send")
+def send_otp(req: OtpSendRequest, request: Request):
+    phone = _check_phone(req.phone)
+    if not settings.has_minimoth_otp_key:
+        raise HTTPException(status_code=503, detail="Phone sign-in is not configured")
+    now = time.time()
+    client_ip = request.client.host if request.client else "unknown"
+    with _otp_lock:
+        times = _otp_send_times[phone]
+        _clean_times(times, now, OTP_SEND_WINDOW)
+        previous = _otp_challenges.get(phone)
+        if previous and previous["created_at"] > now - OTP_RESEND_SECONDS:
+            wait = max(1, int(OTP_RESEND_SECONDS - (now - previous["created_at"])))
+            raise HTTPException(status_code=429, detail=f"Please wait {wait} seconds before requesting another code.")
+        if len(times) >= OTP_SEND_LIMIT:
+            raise HTTPException(status_code=429, detail="Too many codes requested. Please try again later.")
+        ip_times = _otp_send_times[f"ip:{client_ip}"]
+        _clean_times(ip_times, now, OTP_SEND_WINDOW)
+        if len(ip_times) >= OTP_SEND_LIMIT * 5:
+            raise HTTPException(status_code=429, detail="Too many code requests from this network. Please try again later.")
+        times.append(now)
+        ip_times.append(now)
+
+    data = _minimoth_request("send", {"phone": phone})
+    with _otp_lock:
+        _otp_challenges[phone] = {
+            "otp_id": data.get("otp_id"),
+            "created_at": now,
+        }
+        _otp_verify_times[phone].clear()
+        # Drop expired challenges so process memory remains bounded over time.
+        for old_phone, challenge in list(_otp_challenges.items()):
+            if challenge["created_at"] <= now - OTP_TTL_SECONDS:
+                _otp_challenges.pop(old_phone, None)
+    # otp_id remains server-side; neither provider tokens nor the challenge id are sent to the browser.
+    return {"sent": True, "expires_in": OTP_TTL_SECONDS, "resend_after": OTP_RESEND_SECONDS}
+
+
+@router.post("/otp/verify")
+def verify_otp(req: OtpVerifyRequest, response: Response, request: Request):
+    phone = _check_phone(req.phone)
+    if not settings.has_minimoth_otp_key:
+        raise HTTPException(status_code=503, detail="Phone sign-in is not configured")
+    now = time.time()
+    client_ip = request.client.host if request.client else "unknown"
+    with _otp_lock:
+        challenge = _otp_challenges.get(phone)
+        if not challenge or challenge["created_at"] <= now - OTP_TTL_SECONDS:
+            _otp_challenges.pop(phone, None)
+            raise HTTPException(status_code=400, detail="Request a new code before verifying")
+        times = _otp_verify_times[phone]
+        _clean_times(times, now, OTP_VERIFY_WINDOW)
+        if len(times) >= OTP_VERIFY_LIMIT:
+            raise HTTPException(status_code=429, detail="Too many verification attempts. Request a new code later.")
+        ip_times = _otp_verify_times[f"ip:{client_ip}"]
+        _clean_times(ip_times, now, OTP_VERIFY_WINDOW)
+        if len(ip_times) >= OTP_VERIFY_LIMIT * 10:
+            raise HTTPException(status_code=429, detail="Too many verification attempts from this network.")
+        times.append(now)
+        ip_times.append(now)
+
+    data = _minimoth_request("verify", {"phone": phone, "code": req.code})
+    # The MiniMoth access/refresh tokens are deliberately discarded. IgnisGuard owns its session.
+    if not data.get("access_token"):
+        raise HTTPException(status_code=502, detail="Phone verification returned an invalid response.")
+    with _otp_lock:
+        _otp_challenges.pop(phone, None)
+    _session_cookie(response, _make_otp_session(phone))
+    return {"username": "Phone user", "role": "admin"}
+
+
+@router.post("/login")
+def login(req: LoginRequest, response: Response):
+    if settings.has_minimoth_otp_key:
+        raise HTTPException(status_code=403, detail="Password sign-in is disabled while phone OTP sign-in is configured")
+    users = load_users()
+    account = users.get(req.username)
+    encoded_hash = account.get("password_hash", "") if account else hash_password("invalid-user")
+    valid = _verify_password(req.password, encoded_hash)
+    if not account or not valid:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    token = _make_session(req.username, account)
+    _session_cookie(response, token)
     return {"username": req.username, "role": account["role"]}
 
 

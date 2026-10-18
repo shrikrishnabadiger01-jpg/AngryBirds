@@ -31,8 +31,11 @@ class Settings(BaseSettings):
     # SQLite Database for server-side OAuth credentials and audit logs
     database_url: str = "sqlite:///./security_gate.db"
 
-    # MiniMoth LLM API Key (paste your API key here or in .env)
+    # MiniMoth OTP API key; this is never used for Gemini analysis.
     minimoth_api_key: str = ""
+
+    # Gemini key for email/security analysis.
+    gemini_api_key: str = ""
 
     # Gmail API scopes; send actions remain approval-gated in the workspace.
     gmail_scopes: list[str] = [
@@ -49,19 +52,17 @@ class Settings(BaseSettings):
         return bool(self.minimoth_api_key.strip())
 
     @property
-    def has_gemini_key(self) -> bool:
-        """Backwards compatibility alias for has_minimoth_key."""
+    def has_minimoth_otp_key(self) -> bool:
         return self.has_minimoth_key
 
     @property
-    def gemini_api_key(self) -> str:
-        """Backwards compatibility alias for minimoth_api_key."""
-        return self.minimoth_api_key
+    def has_gemini_key(self) -> bool:
+        return bool(self.gemini_api_key.strip())
 
     @model_validator(mode="after")
     def restore_class_defaults_if_empty(self):
         """Ensure non-empty defaults in this file take precedence over empty lines in .env."""
-        for field_name in ("google_client_id", "google_client_secret", "minimoth_api_key"):
+        for field_name in ("google_client_id", "google_client_secret", "minimoth_api_key", "gemini_api_key"):
             val = getattr(self, field_name, "")
             if not val or not str(val).strip():
                 default_val = self.__class__.model_fields[field_name].default
@@ -71,13 +72,15 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def require_production_access_controls(self):
+        if self.auth_enabled and not self.secret_key:
+            raise ValueError("SECRET_KEY is required when AUTH_ENABLED=true")
         if self.app_env.lower() == "production":
             if not self.auth_enabled:
                 raise ValueError("AUTH_ENABLED=true is required in production")
             if len(self.secret_key) < 32:
                 raise ValueError("SECRET_KEY must contain at least 32 characters in production")
-            if not self.auth_users_json.strip():
-                raise ValueError("APP_USERS_JSON must configure at least one user in production")
+            if not self.auth_users_json.strip() and not self.has_minimoth_otp_key:
+                raise ValueError("Configure APP_USERS_JSON or MINIMOTH_API_KEY in production")
         return self
 
     model_config = {"env_file": ".env", "extra": "ignore"}
